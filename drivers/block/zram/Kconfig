@@ -45,7 +45,7 @@ config ZRAM_DEFAULT_COMP_ALGORITHM
 
 config ZRAM_LRU_WRITEBACK
 	bool
-	depends on ZRAM_WRITEBACK
+	depends on ZRAM_WRITEBACK && MINT_SESL
 	default y
 	help
 	  This feature supports zram lru-based writeback (SQZR).
