@@ -1408,6 +1408,8 @@ int fimc_is_sensor_peri_pre_flash_fire(struct v4l2_subdev *subdev, void *arg)
 #endif
 	}
 
+	mutex_lock(&sensor_peri->cis.control_lock);
+
 	/* HACK: reset uctl */
 	flash_uctl->flashMode = 0;
 	flash_uctl->firingPower = 0;
@@ -1415,6 +1417,7 @@ int fimc_is_sensor_peri_pre_flash_fire(struct v4l2_subdev *subdev, void *arg)
 	sensor_ctl->flash_frame_number = 0;
 	sensor_ctl->valid_flash_udctrl = false;
 
+	mutex_unlock(&sensor_peri->cis.control_lock);
 p_err:
 	return ret;
 }
