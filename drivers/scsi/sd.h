@@ -112,7 +112,7 @@ struct scsi_disk {
 	int		prv_media_present;
 #endif
 };
-#define to_scsi_disk(obj) container_of(obj, struct scsi_disk, dev)
+#define to_scsi_disk(obj) container_of(obj,struct scsi_disk,dev)
 
 static inline struct scsi_disk *scsi_disk(struct gendisk *disk)
 {

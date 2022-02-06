@@ -225,6 +225,7 @@ struct dpp_device {
 	spinlock_t slock;
 	spinlock_t dma_slock;
 	struct mutex lock;
+	bool hold_rpm_on_boot;
 };
 
 struct dpp_params_info {

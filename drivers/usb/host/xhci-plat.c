@@ -364,9 +364,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 
 	if (device_property_read_bool(&pdev->dev, "usb3-lpm-capable"))
 		xhci->quirks |= XHCI_LPM_SUPPORT;
-#ifdef CONFIG_USB_HOST_L1_SUPPORT
-	xhci->quirks |= XHCI_LPM_L1_SUPPORT;
-#endif
+
 	if (device_property_read_bool(&pdev->dev, "quirk-broken-port-ped"))
 		xhci->quirks |= XHCI_BROKEN_PORT_PED;
 
@@ -385,8 +383,8 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	/* Get USB3.0 PHY to tune the PHY */
 	if (parent) {
 		xhci->shared_hcd->phy = devm_phy_get(parent, "usb3-phy");
-		if (IS_ERR_OR_NULL(hcd->phy)) {
-			hcd->phy = NULL;
+		if (IS_ERR_OR_NULL(xhci->shared_hcd->phy)) {
+			xhci->shared_hcd->phy = NULL;
 			dev_err(&pdev->dev,
 				"%s: failed to get phy\n", __func__);
 		}
@@ -513,13 +511,14 @@ static int xhci_plat_remove(struct platform_device *dev)
 		hcd->phy = NULL;
 
 	usb_remove_hcd(hcd);
-	dev_info(&dev->dev, "WAKE UNLOCK\n");
-	wake_unlock(xhci->wakelock);
-	wake_lock_destroy(xhci->wakelock);
 	usb_put_hcd(xhci->shared_hcd);
 
 	if (!IS_ERR(clk))
 		clk_disable_unprepare(clk);
+
+	dev_info(&dev->dev, "WAKE UNLOCK\n");
+	wake_unlock(xhci->wakelock);
+	wake_lock_destroy(xhci->wakelock);
 	usb_put_hcd(hcd);
 
 	return 0;

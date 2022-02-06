@@ -377,9 +377,14 @@ static ssize_t gadget_dev_desc_UDC_store(struct config_item *item,
 	pr_info("%s: +++\n", __func__);
 
 	name = kstrdup(page, GFP_KERNEL);
-
 	if (!name)
 		return -ENOMEM;
+
+	if(!len || (strlen(name) != len)) {
+		kfree(name);
+		return -EINVAL;
+	}
+
 	if (name[len - 1] == '\n')
 		name[len - 1] = '\0';
 
@@ -390,13 +395,13 @@ static ssize_t gadget_dev_desc_UDC_store(struct config_item *item,
 		return -ENODEV;
 	}
 #endif
+
 	mutex_lock(&gi->lock);
 
 	if (!strlen(name) || strcmp(name, "none") == 0) {
 		ret = unregister_gadget(gi);
 		if (ret)
 			goto err;
-		/* prevent memory leak */
 		kfree(name);
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
 		if (gi->gsi_boot) {
@@ -603,7 +608,6 @@ static int config_usb_cfg_link(
 		}
 	}
 #endif
-
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
 	/* Go through all configs, attach all functions */
 	list_for_each_entry(c, &gi->cdev.configs, list) {
@@ -624,7 +628,7 @@ static int config_usb_cfg_link(
 							}
 						}
 					}
-					if (!gi->gsi_boot) {
+					if (!gi->gsi_boot && (strcmp(cn->configuration, "mtp_adb") != 0)) {
 						printk("usb: %s: Recovery ADB\n",__func__);
 						f = usb_get_function(fi);
 						if (IS_ERR(f)) {
@@ -1676,10 +1680,7 @@ static void android_work(struct work_struct *data)
 		store_usblog_notify(NOTIFY_USBSTATE, (void *)connected[0], NULL);
 #endif
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
-		if (cdev->desc.bcdUSB == 0x310)
-			set_usb_enumeration_state(0x310); // Super-Speed
-		else
-			set_usb_enumeration_state(0x210); // High-Speed
+		set_usb_enumeration_state(cdev->desc.bcdUSB);
 #endif
 	}
 
@@ -1780,6 +1781,7 @@ static int android_setup(struct usb_gadget *gadget,
 		value = composite_setup(gadget, c);
 
 	spin_lock_irqsave(&cdev->lock, flags);
+
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 	if (c->bRequest == USB_REQ_SET_CONFIGURATION &&
 			cdev->mute_switch == true)
@@ -1821,6 +1823,7 @@ static void android_disconnect(struct usb_gadget *gadget)
 	acc_disconnect();
 #endif
 	gi->connected = 0;
+
 #ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
 	printk(KERN_DEBUG "usb: %s con(%d), sw(%d)\n",
 		 __func__, gi->connected, gi->sw_connected);
@@ -1832,6 +1835,7 @@ static void android_disconnect(struct usb_gadget *gadget)
 		printk(KERN_DEBUG"usb: %s mute_switch con(%d) sw(%d)\n",
 			 __func__, gi->connected, gi->sw_connected);
 	} else {
+
 	//	set_ncm_ready(false);
 		if (cdev->force_disconnect) {
 			gi->sw_connected = 1;

@@ -715,6 +715,11 @@ static int dpp_stop(struct dpp_device *dpp, bool reset)
 	del_timer(&dpp->d.op_timer);
 	dpp_reg_deinit(dpp->id, reset);
 
+	if (dpp->hold_rpm_on_boot == true) {
+		pm_runtime_put_sync(dpp->dev);
+		dpp->hold_rpm_on_boot = false;
+	}
+
 	dpp_dbg("dpp%d is stopped\n", dpp->id);
 
 	dpp->state = DPP_STATE_OFF;
@@ -931,6 +936,11 @@ static void dpp_parse_dt(struct dpp_device *dpp, struct device *dev)
 	dpp_info("dpp(%d) probe start..\n", dpp->id);
 
 	dpp->dev = dev;
+
+	if (of_property_read_bool(dev->of_node, "dpp,hold-rpm-on-boot")) {
+		dpp->hold_rpm_on_boot = true;
+		dpp_info("dpp,hold-rpm-on-boot\n");
+	}
 }
 
 static int dpp_init_resources(struct dpp_device *dpp, struct platform_device *pdev)
@@ -1050,6 +1060,8 @@ static int dpp_probe(struct platform_device *pdev)
 	setup_timer(&dpp->d.op_timer, dpp_op_timer_handler, (unsigned long)dpp);
 
 	pm_runtime_enable(dev);
+	if (dpp->hold_rpm_on_boot == true)
+		pm_runtime_get_sync(dev);
 
 	dpp->state = DPP_STATE_OFF;
 	dpp_info("dpp%d is probed successfully\n", dpp->id);
@@ -1127,7 +1139,7 @@ static int dpp_register(void)
 	return platform_driver_register(&dpp_driver);
 }
 
-device_initcall_sync(dpp_register);
+device_initcall(dpp_register);
 
 MODULE_AUTHOR("Jaehoe Yang <jaehoe.yang@samsung.com>");
 MODULE_AUTHOR("Minho Kim <m8891.kim@samsung.com>");

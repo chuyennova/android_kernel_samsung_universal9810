@@ -50,7 +50,6 @@
 #include <linux/rkp.h>
 #endif
 #endif
-
 u64 idmap_t0sz = TCR_T0SZ(VA_BITS);
 
 u64 kimage_voffset __ro_after_init;
@@ -198,7 +197,6 @@ unsigned int is_rkp_ro_page(u64 addr)
 		return 0;
 }
 #endif
-
 static void alloc_init_pte(pmd_t *pmd, unsigned long addr,
 				  unsigned long end, unsigned long pfn,
 				  pgprot_t prot,
@@ -482,13 +480,9 @@ static void __init __map_memblock(pgd_t *pgd, phys_addr_t start, phys_addr_t end
 	 * region accessible to subsystems such as hibernate, but
 	 * protects it from inadvertent modification or execution.
 	 */
-	// __create_pgd_mapping(pgd, kernel_start, __phys_to_virt(kernel_start),
-	// 		     kernel_end - kernel_start, PAGE_KERNEL_RO,
-	// 		     early_pgtable_alloc, !debug_pagealloc_enabled());
-	__create_pgd_mapping(pgd, __pa(_text), __phys_to_virt(__pa(_text)), (_etext - _text),
-		PAGE_KERNEL_RO, early_pgtable_alloc, !debug_pagealloc_enabled());
-	__create_pgd_mapping(pgd, __pa(__start_rodata), __phys_to_virt(__pa(__start_rodata)),
-		(__init_begin - __start_rodata), PAGE_KERNEL_RO, early_pgtable_alloc, !debug_pagealloc_enabled());
+	__create_pgd_mapping(pgd, kernel_start, __phys_to_virt(kernel_start),
+			     kernel_end - kernel_start, PAGE_KERNEL_RO,
+			     early_pgtable_alloc, !debug_pagealloc_enabled());
 }
 
 static void __init map_mem(pgd_t *pgd)
@@ -550,7 +544,6 @@ static void __init map_kernel_segment(pgd_t *pgd, void *va_start, void *va_end,
 	vma->flags	= VM_MAP;
 	vma->caller	= __builtin_return_address(0);
 
-
 	vm_area_add_early(vma);
 }
 
@@ -576,7 +569,6 @@ static void __init map_kernel_text_segment(pgd_t *pgd, void *va_start, void *va_
 	vm_area_add_early(vma);
 }
 #endif
-
 
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 static int __init map_entry_trampoline(void)
@@ -660,6 +652,7 @@ void __init paging_init(void)
 {
 	phys_addr_t pgd_phys;
 	pgd_t *pgd;
+
 #ifdef CONFIG_UH_RKP
 	phys_addr_t pa;
 	void *va;
@@ -680,7 +673,6 @@ void __init paging_init(void)
 	empty_zero_page = rkp_ro_alloc();
 	BUG_ON(empty_zero_page == NULL);
 #endif
-
 	map_kernel(pgd);
 	map_mem(pgd);
 
@@ -998,12 +990,12 @@ int pmd_clear_huge(pmd_t *pmd)
 	return 1;
 }
 
-int pud_free_pmd_page(pud_t *pud)
+int pud_free_pmd_page(pud_t *pud, unsigned long addr)
 {
 	return pud_none(*pud);
 }
 
-int pmd_free_pte_page(pmd_t *pmd)
+int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 {
 	return pmd_none(*pmd);
 }

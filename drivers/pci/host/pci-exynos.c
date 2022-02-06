@@ -62,7 +62,6 @@ static struct pm_qos_request exynos_pcie_int_qos[MAX_RC_NUM];
 static int exynos_pci_power_mode_event(struct notifier_block *nb,
 		unsigned long event, void *data);
 #endif
-static int sec_argos_l1ss_notifier(struct notifier_block *notifier, unsigned long speed, void *v);
 static void exynos_pcie_resumed_phydown(struct pcie_port *pp);
 static void exynos_pcie_assert_phy_reset(struct pcie_port *pp);
 void exynos_pcie_send_pme_turn_off(struct exynos_pcie *exynos_pcie);
@@ -78,14 +77,6 @@ static int exynos_pcie_wr_other_conf(struct pcie_port *pp,
 		struct pci_bus *bus, u32 devfn, int where, int size, u32 val);
 static void exynos_pcie_prog_viewport_cfg0(struct pcie_port *pp, u32 busdev);
 static void exynos_pcie_prog_viewport_mem_outbound(struct pcie_port *pp);
-
-static struct notifier_block argos_l1ss_nb = {
-	.notifier_call = sec_argos_l1ss_notifier,
-};
-
-static struct notifier_block argos_l1ss_nb2 = {
-	.notifier_call = sec_argos_l1ss_notifier,
-};
 
 static inline void exynos_elb_writel(struct exynos_pcie *pcie, u32 val, u32 reg)
 {
@@ -129,13 +120,7 @@ static struct pci_dev *exynos_pcie_get_pci_dev(struct pcie_port *pp)
 
 	/* Get EP vendor/device ID to get pci_dev structure */
 	ep_pci_bus = pci_find_bus(0, 1); /* Find bus Domain 0, Bus 1(WIFI) */
-	if (ep_pci_bus == NULL) {
-		dev_err(pp->dev, 
-					"Failed to find EP PCIe bus(ep_pci_bus == NULL)!!!\n");
-	}
-	
 	exynos_pcie_rd_other_conf(pp, ep_pci_bus, 0, PCI_VENDOR_ID, 4, &val);
-	dev_err(pp->dev, "%s : device_id & vendor_id = 0x%08x\n", __func__, val);
 
 	ep_pci_dev = pci_get_device(val & ID_MASK, (val >> 16) & ID_MASK, NULL);
 
@@ -157,7 +142,7 @@ static int exynos_pcie_set_l1ss(int enable, struct pcie_port *pp, int id)
 		return -EINVAL;
 	}
 
-	dev_info(pp->dev, "%s: START (state = 0x%x, id = 0x%x, enable = %d)\n",
+	dev_dbg(pp->dev, "%s: START (state = 0x%x, id = 0x%x, enable = %d)\n",
 			__func__, exynos_pcie->l1ss_ctrl_id_state, id, enable);
 	spin_lock_irqsave(&exynos_pcie->conf_lock, flags);
 	if (exynos_pcie->state != STATE_LINK_UP || exynos_pcie->atu_ok == 0) {
@@ -219,7 +204,7 @@ static int exynos_pcie_set_l1ss(int enable, struct pcie_port *pp, int id)
 		}
 	}
 	spin_unlock_irqrestore(&exynos_pcie->conf_lock, flags);
-	dev_info(pp->dev, "%s: END (state = 0x%x, id = 0x%x, enable = %d)\n",
+	dev_dbg(pp->dev, "%s: END (state = 0x%x, id = 0x%x, enable = %d)\n",
 			__func__, exynos_pcie->l1ss_ctrl_id_state, id, enable);
 	return 0;
 }
@@ -297,27 +282,7 @@ int exynos_pcie_l1ss_ctrl(int enable, int id)
 		return -EINVAL;
 }
 EXPORT_SYMBOL(exynos_pcie_l1ss_ctrl);
-static int sec_argos_l1ss_notifier(struct notifier_block *notifier,
-		unsigned long speed, void *v)
-{
-	struct pcie_port *pp = &g_pcie[0].pp;
-	struct exynos_pcie *exynos_pcie = to_exynos_pcie(pp);
 
-	printk("%s - speed : %ld, l1ss_enable = %d\n", __func__, speed, exynos_pcie->l1ss_enable);
-	if (speed > TPUT_THRESHOLD && exynos_pcie->l1ss_enable == 1) {
-		if(exynos_pcie_set_l1ss(0, pp, PCIE_L1SS_CTRL_ARGOS) == 0)
-			exynos_pcie->l1ss_enable = 0;
-		else
-			exynos_pcie->l1ss_enable = 1;
-	} else if (speed <= TPUT_THRESHOLD && exynos_pcie->l1ss_enable == 0) {
-		if(exynos_pcie_set_l1ss(1, pp, PCIE_L1SS_CTRL_ARGOS) == 0)
-			exynos_pcie->l1ss_enable = 1;
-		else
-			exynos_pcie->l1ss_enable = 0;
-	}
-
-	return NOTIFY_OK;
-}
 void exynos_pcie_register_dump(int ch_num)
 {
 	struct pcie_port *pp = &g_pcie[ch_num].pp;
@@ -959,10 +924,6 @@ static int exynos_pcie_clock_enable(struct pcie_port *pp, int enable)
 	if (enable) {
 		for (i = 0; i < exynos_pcie->pcie_clk_num; i++)
 			ret = clk_prepare_enable(clks->pcie_clks[i]);
-#ifdef CONFIG_SEC_PANIC_PCIE_ERR
-			if (ret)
-				panic("[PCIe PANIC Case#2] clk fail!\n");
-#endif		
 	} else {
 		for (i = 0; i < exynos_pcie->pcie_clk_num; i++)
 			clk_disable_unprepare(clks->pcie_clks[i]);
@@ -981,10 +942,6 @@ static int exynos_pcie_phy_clock_enable(struct pcie_port *pp, int enable)
 	if (enable) {
 		for (i = 0; i < exynos_pcie->phy_clk_num; i++)
 			ret = clk_prepare_enable(clks->phy_clks[i]);
-#ifdef CONFIG_SEC_PANIC_PCIE_ERR
-			if (ret)
-				panic("[PCIe PANIC Case#2] PHY clk fail!\n");
-#endif		
 	} else {
 		for (i = 0; i < exynos_pcie->phy_clk_num; i++)
 			clk_disable_unprepare(clks->phy_clks[i]);
@@ -1246,9 +1203,6 @@ retry:
 			goto retry;
 		} else {
 			exynos_pcie_print_link_history(pp);
-#ifdef CONFIG_SEC_PANIC_PCIE_ERR
-			panic("[PCIe PANIC Case#1] PCIe Link up fail!\n");
-#endif			
 			if ((exynos_pcie->ip_ver >= 0x889000) &&
 				(exynos_pcie->ep_device_type == EP_BCM_WIFI)) {
 				return -EPIPE;
@@ -1298,10 +1252,6 @@ void exynos_pcie_dislink_work(struct work_struct *work)
 	dev_info(dev, "link down and recovery cnt: %d\n",
 			exynos_pcie->linkdown_cnt);
 
-#ifdef CONFIG_SEC_PANIC_PCIE_ERR
-	panic("[PCIe Case#4 PANIC] PCIe Link down occurred!\n");
-#endif
-			
 	exynos_pcie_notify_callback(pp, EXYNOS_PCIE_EVENT_LINKDOWN);
 }
 
@@ -1542,11 +1492,11 @@ static int exynos_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 		exynos_pcie_clock_enable(pp, PCIE_ENABLE_CLOCK);
 		exynos_pcie_phy_clock_enable(&exynos_pcie->pp,
 				PCIE_ENABLE_CLOCK);
-
 #ifdef NCLK_OFF_CONTROL
 		if (exynos_pcie->ip_ver == 0x981000)
 			exynos_elb_writel(exynos_pcie, 0x0, PCIE_L12ERR_CTRL);
 #endif
+
 		if (exynos_pcie->phy_ops.phy_check_rx_elecidle != NULL)
 			exynos_pcie->phy_ops.phy_check_rx_elecidle(
 				exynos_pcie->phy_pcs_base, IGNORE_ELECIDLE,
@@ -1572,7 +1522,6 @@ static int exynos_pcie_rd_own_conf(struct pcie_port *pp, int where, int size,
 
 	spin_unlock_irqrestore(&exynos_pcie->reg_lock, flags);
 
-
 	return ret;
 }
 
@@ -1585,7 +1534,7 @@ static int exynos_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 	u32 __maybe_unused reg_val;
 	unsigned long flags;
 
-	spin_lock_irqsave(&exynos_pcie->reg_lock, flags);	
+	spin_lock_irqsave(&exynos_pcie->reg_lock, flags);
 
 #ifdef CONFIG_DYNAMIC_PHY_OFF
 	ret = regmap_read(exynos_pcie->pmureg,
@@ -1604,7 +1553,6 @@ static int exynos_pcie_wr_own_conf(struct pcie_port *pp, int where, int size,
 		exynos_pcie_clock_enable(pp, PCIE_ENABLE_CLOCK);
 		exynos_pcie_phy_clock_enable(&exynos_pcie->pp,
 				PCIE_ENABLE_CLOCK);
-
 #ifdef NCLK_OFF_CONTROL
 		if (exynos_pcie->ip_ver == 0x981000)
 			exynos_elb_writel(exynos_pcie, 0x0, PCIE_L12ERR_CTRL);
@@ -1775,10 +1723,10 @@ static int __init add_pcie_port(struct pcie_port *pp,
 	pp->root_bus_nr = 0;
 	pp->ops = &exynos_pcie_host_ops;
 
+	spin_lock_init(&exynos_pcie->reg_lock);
 	exynos_pcie_setup_rc(pp);
 	spin_lock_init(&exynos_pcie->pcie_l1_exit_lock);
 	spin_lock_init(&exynos_pcie->conf_lock);
-	spin_lock_init(&exynos_pcie->reg_lock);	
 	ret = dw_pcie_host_init(pp);
 #ifdef CONFIG_PCI_MSI
 	dw_pcie_msi_init(pp);
@@ -2164,20 +2112,6 @@ static int __init exynos_pcie_probe(struct platform_device *pdev)
 				exynos_pcie_work_l1ss);
 	platform_set_drvdata(pdev, exynos_pcie);
 
-	if (exynos_pcie->ch_num == 0) {
-		ret = sec_argos_register_notifier(&argos_l1ss_nb, "WIFI");
-		if (ret < 0) {
-			dev_err(&pdev->dev, "Failed to register WIFI notifier\n");
-			goto probe_fail;
-		}
-
-		ret = sec_argos_register_notifier(&argos_l1ss_nb2, "P2P");
-		if (ret < 0) {
-			dev_err(&pdev->dev, "Failed to register P2P notifier\n");
-			goto probe_fail;
-		}
-	}
-
 probe_fail:
 	if (ret)
 		dev_err(&pdev->dev, "%s: pcie probe failed\n", __func__);
@@ -2208,11 +2142,6 @@ static int __exit exynos_pcie_remove(struct platform_device *pdev)
 #ifdef CONFIG_CPU_IDLE
 	exynos_pm_unregister_notifier(&exynos_pcie->power_mode_nb);
 #endif
-
-	if (exynos_pcie->ch_num == 0) {
-		sec_argos_unregister_notifier(&argos_l1ss_nb, "WIFI");
-		sec_argos_unregister_notifier(&argos_l1ss_nb2, "P2P");
-	}
 
 	if (exynos_pcie->state != STATE_LINK_DOWN) {
 		exynos_pcie_poweroff(exynos_pcie->ch_num);
@@ -2292,9 +2221,6 @@ void exynos_pcie_config_l1ss(struct pcie_port *pp)
 	if (ep_pci_dev == NULL) {
 		dev_err(pp->dev,
 			"Failed to set L1SS Enable (pci_dev == NULL)!!!\n");
-#ifdef CONFIG_SEC_PANIC_PCIE_ERR			
-		panic("No ep_pci_dev found!!!\n");
-#endif		
 		return ;
 	}
 
@@ -2425,7 +2351,7 @@ int exynos_pcie_poweron(int ch_num)
 #ifdef NCLK_OFF_CONTROL
 		if (exynos_pcie->ip_ver == 0x981000)
 			exynos_elb_writel(exynos_pcie, 0x0, PCIE_L12ERR_CTRL);
-#endif		
+#endif
 
 		exynos_pcie->state = STATE_LINK_UP;
 
@@ -2636,7 +2562,7 @@ retry_pme_turnoff:
 
 	exynos_elb_writel(exynos_pcie, 0x0, XMIT_PME_TURNOFF);
 
-	count = 0;	
+	count = 0;
 	do {
 		val = exynos_elb_readl(exynos_pcie, PCIE_ELBI_RDLH_LINKUP);
 		val = val & 0x1f;
@@ -2654,9 +2580,6 @@ retry_pme_turnoff:
 			goto retry_pme_turnoff;
 		}
 		dev_err(dev, "cannot receive L23_READY DLLP packet(0x%x)\n", val);
-#ifdef CONFIG_SEC_PANIC_PCIE_ERR
-		panic("[PCIe PANIC Case#5] L2/3 READY fail!\n");
-#endif
 	}
 }
 

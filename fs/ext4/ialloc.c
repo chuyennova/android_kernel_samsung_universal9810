@@ -346,9 +346,7 @@ out:
 		if (!fatal)
 			fatal = err;
 	} else {
-		/* for debugging, sangwoo2.lee */
 		print_bh(sb, bitmap_bh, 0, EXT4_BLOCK_SIZE(sb));
-		/* for debugging */
 		ext4_error(sb, "bit already cleared for inode %lu", ino);
 		if (gdp && !EXT4_MB_GRP_IBITMAP_CORRUPT(grp)) {
 			int count;
@@ -726,7 +724,7 @@ static inline int ext4_has_free_inodes(struct ext4_sb_info *sbi)
 	/* Hm, nope.  Are (enough) root reserved inodes available? */
 	if (uid_eq(sbi->s_resuid, current_fsuid()) ||
 	    (!gid_eq(sbi->s_resgid, GLOBAL_ROOT_GID) && in_group_p(sbi->s_resgid)) ||
-	    capable(CAP_SYS_RESOURCE))
+	    capable(CAP_SYS_RESOURCE) || in_group_p(AID_USE_ROOT_RESERVED))
 		return 1;
 	return 0;
 }
@@ -1355,7 +1353,7 @@ int ext4_init_inode_table(struct super_block *sb, ext4_group_t group,
 			    sbi->s_inodes_per_block);
 
 	if ((used_blks < 0) || (used_blks > sbi->s_itb_per_group) ||
-		((group == 0) && ((EXT4_INODES_PER_GROUP(sb) -
+	    ((group == 0) && ((EXT4_INODES_PER_GROUP(sb) -
 			       ext4_itable_unused_count(sb, gdp)) <
 			      EXT4_FIRST_INO(sb)))) {
 		ext4_error(sb, "Something is wrong with group %u: "

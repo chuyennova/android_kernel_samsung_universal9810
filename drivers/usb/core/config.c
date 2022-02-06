@@ -213,7 +213,7 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno, int inum,
 	buffer += d->bLength;
 	size -= d->bLength;
 
-	if ((d->bmAttributes & 0x3) == 0x1) {
+	if (( d->bmAttributes & 0x3 ) == 0x1) {
 		if (d->bEndpointAddress & USB_ENDPOINT_DIR_MASK) {
 			to_usb_device(ddev)->hwinfo.in_ep = d->bEndpointAddress;
 			dev_info(ddev, " This is IN ISO endpoint #0%x \n", d->bEndpointAddress);
@@ -951,8 +951,8 @@ int usb_get_bos_descriptor(struct usb_device *dev)
 
 	/* Get BOS descriptor */
 	ret = usb_get_descriptor(dev, USB_DT_BOS, 0, bos, USB_DT_BOS_SIZE);
-	if (ret < USB_DT_BOS_SIZE) {
-		dev_err(ddev, "unable to get BOS descriptor\n");
+	if (ret < USB_DT_BOS_SIZE || bos->bLength < USB_DT_BOS_SIZE) {
+		dev_err(ddev, "unable to get BOS descriptor or descriptor too short\n");
 		if (ret >= 0)
 			ret = -ENOMSG;
 		kfree(bos);

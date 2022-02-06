@@ -125,6 +125,7 @@ config ARCH_ROCKCHIP
 	select GPIOLIB
 	select PINCTRL
 	select PINCTRL_ROCKCHIP
+	select PM
 	select ROCKCHIP_TIMER
 	help
 	  This enables support for the ARMv8 based Rockchip chipsets,
@@ -273,6 +274,10 @@ config SOC_EXYNOS9810
 	select CLKSRC_EXYNOS_MCT
 	select PINCTRL
 	select SAMSUNG_DMADEV
+
+config SOC_EXYNOS9810_EVT0
+	bool "Samsung EXYNOS9810_EVT0"
+	depends on SOC_EXYNOS9810
 
 config SOC_EXYNOS9810_EVT1
 	bool "Samsung EXYNOS9810_EVT1"

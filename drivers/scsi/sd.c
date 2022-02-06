@@ -7,20 +7,20 @@
  *              Subsequent revisions: Eric Youngdale
  *	Modification history:
  *       - Drew Eckhardt <drew@colorado.edu> original
- *       - Eric Youngdale <eric@andante.org> add scatter-gather, multiple
+ *       - Eric Youngdale <eric@andante.org> add scatter-gather, multiple 
  *         outstanding request, and other enhancements.
  *         Support loadable low-level scsi drivers.
- *       - Jirka Hanika <geo@ff.cuni.cz> support more scsi disks using
+ *       - Jirka Hanika <geo@ff.cuni.cz> support more scsi disks using 
  *         eight major numbers.
  *       - Richard Gooch <rgooch@atnf.csiro.au> support devfs.
- *	 - Torben Mathiasen <tmm@image.dk> Resource allocation fixes in
+ *	 - Torben Mathiasen <tmm@image.dk> Resource allocation fixes in 
  *	   sd_init and cleanups.
  *	 - Alex Davis <letmein@erols.com> Fix problem where partition info
- *	   not being read in sd_open. Fix problem where removable media
+ *	   not being read in sd_open. Fix problem where removable media 
  *	   could be ejected after sd_open.
  *	 - Douglas Gilbert <dgilbert@interlog.com> cleanup for lk 2.5.x
- *	 - Badari Pulavarty <pbadari@us.ibm.com>, Matthew Wilcox
- *	   <willy@debian.org>, Kurt Garloff <garloff@suse.de>:
+ *	 - Badari Pulavarty <pbadari@us.ibm.com>, Matthew Wilcox 
+ *	   <willy@debian.org>, Kurt Garloff <garloff@suse.de>: 
  *	   Support 32k/1M disks.
  *
  *	Logging policy (needs CONFIG_SCSI_LOGGING defined):
@@ -29,7 +29,7 @@
  *	 - entering sd_ioctl: SCSI_LOG_IOCTL level 1
  *	 - entering other commands: SCSI_LOG_HLQUEUE level 3
  *	Note: when the logging level is set by the user, it must be greater
- *	than the level indicated above to trigger output.
+ *	than the level indicated above to trigger output.	
  */
 
 #include <linux/module.h>
@@ -214,6 +214,12 @@ cache_type_store(struct device *dev, struct device_attribute *attr,
 	buffer_data[2] |= wce << 2 | rcd;
 	sp = buffer_data[0] & 0x80 ? 1 : 0;
 	buffer_data[0] &= ~0x80;
+
+	/*
+	 * Ensure WP, DPOFUA, and RESERVED fields are cleared in
+	 * received mode parameter buffer before doing MODE SELECT.
+	 */
+	data.device_specific = 0;
 
 	if (scsi_mode_select(sdp, 1, sp, 8, buffer_data, len, SD_TIMEOUT,
 			     SD_MAX_RETRIES, &data, &sshdr)) {
@@ -555,16 +561,16 @@ static struct kobject *sd_default_probe(dev_t devt, int *partno, void *data)
 
 /*
  * Device no to disk mapping:
- *
+ * 
  *       major         disc2     disc  p1
  *   |............|.............|....|....| <- dev_t
  *    31        20 19          8 7  4 3  0
- *
+ * 
  * Inside a major, we have 16k disks, however mapped non-
  * contiguously. The first 16 disks are for major0, the next
- * ones with major1, ... Disk 256 is for major0 again, disk 272
- * for major1, ...
- * As we stay compatible with our numbering scheme, we can reuse
+ * ones with major1, ... Disk 256 is for major0 again, disk 272 
+ * for major1, ... 
+ * As we stay compatible with our numbering scheme, we can reuse 
  * the well-know SCSI majors 8, 65--71, 136--143.
  */
 static int sd_major(int major_idx)
@@ -955,7 +961,7 @@ static int sd_setup_read_write_cmnd(struct scsi_cmnd *SCpnt)
 
 	if (sdp->changed) {
 		/*
-		 * quietly refuse to do anything to a changed disc until
+		 * quietly refuse to do anything to a changed disc until 
 		 * the changed bit has been reset
 		 */
 		/* printk("SCSI disk has been changed or is not present. Prohibiting further I/O.\n"); */
@@ -1115,25 +1121,6 @@ static int sd_setup_read_write_cmnd(struct scsi_cmnd *SCpnt)
 		SCpnt->cmnd[6] = SCpnt->cmnd[9] = 0;
 		SCpnt->cmnd[7] = (unsigned char) (this_count >> 8) & 0xff;
 		SCpnt->cmnd[8] = (unsigned char) this_count & 0xff;
-
-#ifdef CONFIG_JOURNAL_DATA_TAG
-		if (blk_queue_journal_tag(rq->q) &&
-				(rq->cmd_flags & REQ_META) &&
-				(rq_data_dir(rq) == WRITE)) {
-#ifdef CONFIG_JOURNAL_DATA_TAG_DEBUG
-			static unsigned long log_time;
-			static unsigned long tag_count;
-
-			tag_count++;
-			if (printk_timed_ratelimit(&log_time, 5000)) {
-				pr_info("set ufs data tag for %lu meta flagged writes.\n",
-						tag_count);
-				tag_count = 0;
-			}
-#endif
-			SCpnt->cmnd[6] |= (1 << 4);
-		}
-#endif
 	} else {
 		if (unlikely(rq->cmd_flags & REQ_FUA)) {
 			/*
@@ -1188,7 +1175,8 @@ static int sd_init_command(struct scsi_cmnd *cmd)
 	case REQ_OP_WRITE:
 		return sd_setup_read_write_cmnd(cmd);
 	default:
-		BUG();
+		WARN_ON_ONCE(1);
+		return BLKPREP_KILL;
 	}
 }
 
@@ -1211,7 +1199,7 @@ static void sd_uninit_command(struct scsi_cmnd *SCpnt)
  *	@inode: only i_rdev member may be used
  *	@filp: only f_mode and f_flags may be used
  *
- *	Returns 0 if successful. Returns a negated errno value in case
+ *	Returns 0 if successful. Returns a negated errno value in case 
  *	of error.
  *
  *	Note: This can be called from a user context (e.g. fsck(1) )
@@ -1279,7 +1267,7 @@ static int sd_open(struct block_device *bdev, fmode_t mode)
 
 error_out:
 	scsi_disk_put(sdkp);
-	return retval;
+	return retval;	
 }
 
 /**
@@ -1288,7 +1276,7 @@ error_out:
  *	@inode: only i_rdev member may be used
  *	@filp: only f_mode and f_flags may be used
  *
- *	Returns 0.
+ *	Returns 0. 
  *
  *	Note: may block (uninterruptible) if error recovery is underway
  *	on this disk.
@@ -1306,11 +1294,6 @@ static void sd_release(struct gendisk *disk, fmode_t mode)
 		if (scsi_block_when_processing_errors(sdev))
 			scsi_set_medium_removal(sdev, SCSI_REMOVAL_ALLOW);
 	}
-
-	/*
-	 * XXX and what if there are packets in flight and this close()
-	 * XXX is followed by a "rmmod sd_mod"?
-	 */
 
 	scsi_disk_put(sdkp);
 }
@@ -1362,7 +1345,7 @@ static int sd_ioctl(struct block_device *bdev, fmode_t mode,
 	struct scsi_device *sdp = sdkp->device;
 	void __user *p = (void __user *)arg;
 	int error;
-
+    
 	SCSI_LOG_IOCTL(1, sd_printk(KERN_INFO, sdkp, "sd_ioctl: disk=%s, "
 				    "cmd=0x%x\n", disk->disk_name, cmd));
 
@@ -1387,18 +1370,18 @@ static int sd_ioctl(struct block_device *bdev, fmode_t mode,
 	 * resolved.
 	 */
 	switch (cmd) {
-	case SCSI_IOCTL_GET_IDLUN:
-	case SCSI_IOCTL_GET_BUS_NUMBER:
-	case SCSI_IOCTL_SECURITY_PROTOCOL_IN:
-	case SCSI_IOCTL_SECURITY_PROTOCOL_OUT:
-		error = scsi_ioctl(sdp, cmd, p);
-		break;
-	default:
-		error = scsi_cmd_blk_ioctl(bdev, mode, cmd, p);
-		if (error != -ENOTTY)
+		case SCSI_IOCTL_GET_IDLUN:
+		case SCSI_IOCTL_GET_BUS_NUMBER:
+		case SCSI_IOCTL_SECURITY_PROTOCOL_IN:
+		case SCSI_IOCTL_SECURITY_PROTOCOL_OUT:
+			error = scsi_ioctl(sdp, cmd, p);
 			break;
-		error = scsi_ioctl(sdp, cmd, p);
-		break;
+		default:
+			error = scsi_cmd_blk_ioctl(bdev, mode, cmd, p);
+			if (error != -ENOTTY)
+				break;
+			error = scsi_ioctl(sdp, cmd, p);
+			break;
 	}
 out:
 	return error;
@@ -1579,9 +1562,9 @@ static void sd_rescan(struct device *dev)
 
 
 #ifdef CONFIG_COMPAT
-/*
- * This gets directly called from VFS. When the ioctl
- * is not recognized we go back to the other translation paths.
+/* 
+ * This gets directly called from VFS. When the ioctl 
+ * is not recognized we go back to the other translation paths. 
  */
 static int sd_compat_ioctl(struct block_device *bdev, fmode_t mode,
 			   unsigned int cmd, unsigned long arg)
@@ -1593,11 +1576,12 @@ static int sd_compat_ioctl(struct block_device *bdev, fmode_t mode,
 			(mode & FMODE_NDELAY) != 0);
 	if (error)
 		return error;
-	/*
+	       
+	/* 
 	 * Let the static ioctl translation table take care of it.
 	 */
 	if (!sdev->host->hostt->compat_ioctl)
-		return -ENOIOCTLCMD;
+		return -ENOIOCTLCMD; 
 	return sdev->host->hostt->compat_ioctl(sdev, cmd, (void __user *)arg);
 }
 #endif
@@ -1938,7 +1922,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 			if (the_result)
 				sense_valid = scsi_sense_valid(&sshdr);
 			retries++;
-		} while (retries < 3 &&
+		} while (retries < 3 && 
 			 (!scsi_status_is_good(the_result) ||
 			  ((driver_byte(the_result) & DRIVER_SENSE) &&
 			  sense_valid && sshdr.sense_key == UNIT_ATTENTION)));
@@ -1946,7 +1930,7 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 		if ((driver_byte(the_result) & DRIVER_SENSE) == 0) {
 			/* no sense, TUR either succeeded or failed
 			 * with a status error */
-			if (!spintime && !scsi_status_is_good(the_result)) {
+			if(!spintime && !scsi_status_is_good(the_result)) {
 				sd_print_result(sdkp, "Test Unit Ready failed",
 						the_result);
 			}
@@ -2007,13 +1991,13 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 		} else {
 			/* we don't understand the sense code, so it's
 			 * probably pointless to loop */
-			if (!spintime) {
+			if(!spintime) {
 				sd_printk(KERN_NOTICE, sdkp, "Unit Not Ready\n");
 				sd_print_sense_hdr(sdkp, &sshdr);
 			}
 			break;
 		}
-
+				
 	} while (spintime && time_before_eq(jiffies, spintime_expire));
 
 	if (spintime) {
@@ -2432,7 +2416,6 @@ sd_read_write_protect_flag(struct scsi_disk *sdkp, unsigned char *buffer)
 	int res;
 	struct scsi_device *sdp = sdkp->device;
 	struct scsi_mode_data data;
-	int disk_ro = get_disk_ro(sdkp->disk);
 	int old_wp = sdkp->write_prot;
 
 	set_disk_ro(sdkp->disk, 0);
@@ -2473,7 +2456,7 @@ sd_read_write_protect_flag(struct scsi_disk *sdkp, unsigned char *buffer)
 			  "Test WP failed, assume Write Enabled\n");
 	} else {
 		sdkp->write_prot = ((data.device_specific & 0x80) != 0);
-		set_disk_ro(sdkp->disk, sdkp->write_prot || disk_ro);
+		set_disk_ro(sdkp->disk, sdkp->write_prot);
 		if (sdkp->first_scan || old_wp != sdkp->write_prot) {
 			sd_printk(KERN_NOTICE, sdkp, "Write Protect is %s\n",
 				  sdkp->write_prot ? "on" : "off");
@@ -3246,13 +3229,13 @@ static void sd_probe_async(void *data, async_cookie_t cookie)
  *	for each scsi device (not just disks) present.
  *	@dev: pointer to device object
  *
- *	Returns 0 if successful (or not interested in this scsi device
+ *	Returns 0 if successful (or not interested in this scsi device 
  *	(e.g. scanner)); 1 when there is an error.
  *
  *	Note: this function is invoked from the scsi mid-level.
- *	This function sets up the mapping between a given
- *	<host,channel,id,lun> (found in sdp) and new device name
- *	(e.g. /dev/sda). More precisely it is the block device major
+ *	This function sets up the mapping between a given 
+ *	<host,channel,id,lun> (found in sdp) and new device name 
+ *	(e.g. /dev/sda). More precisely it is the block device major 
  *	and minor number that is chosen here.
  *
  *	Assume sd_probe is not re-entrant (for time being)
@@ -3310,7 +3293,6 @@ static int sd_probe(struct device *dev)
 	sdkp->driver = &sd_template;
 	sdkp->disk = gd;
 	sdkp->index = index;
-
 	atomic_set(&sdkp->openers, 0);
 	atomic_set(&sdkp->device->ioerr_cnt, 0);
 
@@ -3325,6 +3307,7 @@ static int sd_probe(struct device *dev)
 					     SD_UFS_TIMEOUT);
 	}
 
+
 #ifdef CONFIG_SCSI_UFSHCD
 	if (!sdp->host->by_ufs) {
 #else
@@ -3337,8 +3320,7 @@ static int sd_probe(struct device *dev)
 		 * function is called. It is effective for slow USB memory.
 		 */
 		q->nr_requests = BLKDEV_MAX_RQ / 8;
-		if (q->nr_requests < 32)
-			q->nr_requests = 32;
+		if (q->nr_requests < 32) q->nr_requests = 32;
 #ifdef CONFIG_LARGE_DIRTY_BUFFER
 		/* apply more throttle on non-ufs scsi device */
 		q->backing_dev_info.capabilities |= BDI_CAP_STRICTLIMIT;
@@ -3429,7 +3411,7 @@ static int sd_remove(struct device *dev)
 
 	/* restore bdi min/max ratio before device removal */
 	sdp = to_scsi_device(dev);
-	if (sdp && sdp->request_queue && &sdp->request_queue->backing_dev_info) {
+	if (sdp && sdp->request_queue) {
 		bdi_set_min_ratio(&sdp->request_queue->backing_dev_info, 0);
 		bdi_set_max_ratio(&sdp->request_queue->backing_dev_info, 100);
 	}
@@ -3478,10 +3460,22 @@ static void scsi_disk_release(struct device *dev)
 {
 	struct scsi_disk *sdkp = to_scsi_disk(dev);
 	struct gendisk *disk = sdkp->disk;
+	struct request_queue *q = disk->queue;
 
 	spin_lock(&sd_index_lock);
 	ida_remove(&sd_index_ida, sdkp->index);
 	spin_unlock(&sd_index_lock);
+
+	/*
+	 * Wait until all requests that are in progress have completed.
+	 * This is necessary to avoid that e.g. scsi_end_request() crashes
+	 * due to clearing the disk->private_data pointer. Wait from inside
+	 * scsi_disk_release() instead of from sd_release() to avoid that
+	 * freezing and unfreezing the request queue affects user space I/O
+	 * in case multiple processes open a /dev/sd... node concurrently.
+	 */
+	blk_mq_freeze_queue(q);
+	blk_mq_unfreeze_queue(q);
 
 	disk->private_data = NULL;
 	put_disk(disk);

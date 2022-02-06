@@ -65,6 +65,7 @@ struct proc_inode {
 	struct proc_dir_entry *pde;
 	struct ctl_table_header *sysctl;
 	struct ctl_table *sysctl_entry;
+	struct hlist_node sysctl_inodes;
 	const struct proc_ns_operations *ns_ops;
 	struct inode vfs_inode;
 };
@@ -214,7 +215,7 @@ extern const struct inode_operations proc_pid_link_inode_operations;
 
 extern void proc_init_inodecache(void);
 extern struct inode *proc_get_inode(struct super_block *, struct proc_dir_entry *);
-extern int proc_fill_super(struct super_block *, void *data, int flags);
+extern int proc_fill_super(struct super_block *);
 extern void proc_entry_rundown(struct proc_dir_entry *);
 
 /*
@@ -251,10 +252,12 @@ extern void proc_thread_self_init(void);
  */
 #ifdef CONFIG_PROC_SYSCTL
 extern int proc_sys_init(void);
-extern void sysctl_head_put(struct ctl_table_header *);
+extern void proc_sys_evict_inode(struct inode *inode,
+				 struct ctl_table_header *head);
 #else
 static inline void proc_sys_init(void) { }
-static inline void sysctl_head_put(struct ctl_table_header *head) { }
+static inline void proc_sys_evict_inode(struct  inode *inode,
+					struct ctl_table_header *head) { }
 #endif
 
 /*
@@ -279,7 +282,6 @@ static inline void proc_tty_init(void) {}
  * root.c
  */
 extern struct proc_dir_entry proc_root;
-extern int proc_parse_options(char *options, struct pid_namespace *pid);
 
 extern void proc_self_init(void);
 extern int proc_remount(struct super_block *, int *, char *);
@@ -320,3 +322,19 @@ extern unsigned long task_statm(struct mm_struct *,
 extern void task_statlmkd(struct mm_struct *, unsigned long *,
 				unsigned long *, unsigned long *);
 extern void task_mem(struct seq_file *, struct mm_struct *);
+
+#ifdef CONFIG_PAGE_BOOST
+#include <linux/pagevec.h>
+
+#define MAX_PAGE_BOOST_FILEPATH_LEN 256
+
+struct proc_filemap_private {
+	struct proc_maps_private maps_private;
+	struct file *target_file;
+	char target_file_name[MAX_PAGE_BOOST_FILEPATH_LEN + 1];
+	bool show_list; /* true : filemap_list, false : filemap_info */
+};
+
+extern const struct file_operations proc_pid_filemap_list_operations;
+extern const struct file_operations proc_pid_io_record_operations;
+#endif

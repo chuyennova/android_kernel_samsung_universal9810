@@ -19,6 +19,11 @@
 #include <linux/atomic.h>
 #include <linux/uidgid.h>
 
+#include <linux/sched.h>
+#ifdef CONFIG_RKP_KDP
+#include <linux/kdp.h>
+#endif
+
 struct user_struct;
 struct cred;
 struct inode;
@@ -84,6 +89,19 @@ extern int groups_search(const struct group_info *, kgid_t);
 extern bool may_setgroups(void);
 extern void groups_sort(struct group_info *);
 
+#ifdef CONFIG_RKP_KDP
+struct ro_rcu_head {
+	/* RCU deletion */
+	union {
+		int non_rcu;		/* Can we skip RCU deletion? */
+		struct rcu_head	rcu;	/* RCU deletion hook */
+	};
+	void *bp_cred;
+};
+#define get_rocred_rcu(cred) ((struct ro_rcu_head *)((atomic_t *)cred->use_cnt + 1))
+#define get_usecnt_rcu(use_cnt) ((struct ro_rcu_head *)((atomic_t *)use_cnt + 1))
+#endif
+
 /*
  * The security context of a task
  *
@@ -144,7 +162,11 @@ struct cred {
 	struct user_struct *user;	/* real user ID subscription */
 	struct user_namespace *user_ns; /* user_ns the caps and keyrings are relative to. */
 	struct group_info *group_info;	/* supplementary groups for euid/fsgid */
-	struct rcu_head	rcu;		/* RCU deletion hook */
+	/* RCU deletion */
+	union {
+		int non_rcu;			/* Can we skip RCU deletion? */
+		struct rcu_head	rcu;		/* RCU deletion hook */
+	};
 #ifdef CONFIG_RKP_KDP
 	atomic_t *use_cnt;
 	struct task_struct *bp_task;
@@ -170,7 +192,7 @@ enum {
 	RKP_CMD_CMMIT_CREDS,
 	RKP_CMD_OVRD_CREDS,
 };
-#define override_creds(x) rkp_override_creds(&x)
+#define override_creds(x) rkp_override_creds((struct cred **)(&x))
 #endif /*CONFIG_RKP_KDP*/
 
 extern void __put_cred(struct cred *);
@@ -278,6 +300,12 @@ static inline const struct cred *get_cred(const struct cred *cred)
 {
 	struct cred *nonconst_cred = (struct cred *) cred;
 	validate_creds(cred);
+#ifdef CONFIG_RKP_KDP
+	if (rkp_ro_page((unsigned long)nonconst_cred))
+		get_rocred_rcu(nonconst_cred)->non_rcu = 0;
+	else
+#endif
+	nonconst_cred->non_rcu = 0;
 	return get_new_cred(nonconst_cred);
 }
 

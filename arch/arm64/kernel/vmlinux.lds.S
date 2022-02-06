@@ -123,7 +123,6 @@ SECTIONS
 		_text = .;
 		HEAD_TEXT
 	}
-	. = ALIGN(1<<PAGE_SHIFT);
 	.text : {			/* Real text segment		*/
 		_stext = .;		/* Text and read-only data	*/
 			__exception_text_start = .;
@@ -231,11 +230,8 @@ SECTIONS
 	.altinstr_replacement : {
 		KEEP(*(.altinstr_replacement))
 	}
-	. = ALIGN(0x1000);
-	.rela : {
-		__reloc_start = .;
+	.rela : ALIGN(8) {
 		*(.rela .rela*)
-		__reloc_end = .;
 	}
 
 	__rela_offset	= ABSOLUTE(ADDR(.rela) - KIMAGE_VADDR);

@@ -21,7 +21,6 @@
 #include <linux/log2.h>
 #include <linux/pm_runtime.h>
 #include <linux/badblocks.h>
-#include <linux/ologk.h>
 
 #ifdef CONFIG_BLOCK_SUPPORT_STLOG
 #include <linux/fslog.h>
@@ -576,14 +575,18 @@ exit:
 	/* announce disk after possible partitions are created */
 	dev_set_uevent_suppress(ddev, 0);
 	kobject_uevent(&ddev->kobj, KOBJ_ADD);
+#ifdef CONFIG_BLOCK_SUPPORT_STLOG
 	ST_LOG("<%s> KOBJ_ADD %d:%d", __func__, major, first_minor);
+#endif
 
 	/* announce possible partitions */
 	disk_part_iter_init(&piter, disk, 0);
 	while ((part = disk_part_iter_next(&piter))) {
 		kobject_uevent(&part_to_dev(part)->kobj, KOBJ_ADD);
+#ifdef CONFIG_BLOCK_SUPPORT_STLOG
 		ST_LOG("<%s> KOBJ_ADD %d:%d", __func__, major,
-					first_minor + part->partno);
+		                        first_minor + part->partno);
+#endif
 	}
 	disk_part_iter_exit(&piter);
 }
@@ -959,7 +962,7 @@ static int show_iodevs(struct seq_file *seqf, void *v)
 
 	/* Don't show non-partitionable removeable devices or empty devices */
 	if (!get_capacity(sgp) || (!disk_max_parts(sgp) &&
-				   (sgp->flags & GENHD_FL_REMOVABLE)))
+				(sgp->flags & GENHD_FL_REMOVABLE)))
 		return 0;
 	if (sgp->flags & GENHD_FL_SUPPRESS_PARTITION_INFO)
 		return 0;
@@ -974,7 +977,7 @@ static int show_iodevs(struct seq_file *seqf, void *v)
 			continue;
 
 		seq_printf(seqf, "%12s\t%12llu\n",
-			   disk_name(sgp, part->partno, buf), size);
+				disk_name(sgp, part->partno, buf), size);
 	}
 	disk_part_iter_exit(&piter);
 
@@ -982,10 +985,10 @@ static int show_iodevs(struct seq_file *seqf, void *v)
 }
 
 static const struct seq_operations iodevs_op = {
-	.start	= show_iodevs_start,
-	.next	= disk_seqf_next,
-	.stop	= disk_seqf_stop,
-	.show	= show_iodevs
+	.start  = show_iodevs_start,
+	.next   = disk_seqf_next,
+	.stop   = disk_seqf_stop,
+	.show   = show_iodevs
 };
 
 static int iodevs_open(struct inode *inode, struct file *file)
@@ -994,10 +997,10 @@ static int iodevs_open(struct inode *inode, struct file *file)
 }
 
 static const struct file_operations proc_iodevs_operations = {
-	.open		= iodevs_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= seq_release,
+	.open           = iodevs_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = seq_release,
 };
 #endif
 
@@ -1155,93 +1158,6 @@ static ssize_t disk_ios_show(struct device *dev,
 }
 #undef DISCARD
 
-/* IOPP-iomon-v1.1.4.4 */
-#define SEC2MB(x) ((unsigned long)((x) / 2 / 1024))
-static ssize_t iomon_show(struct device *dev,
-		struct device_attribute *attr,
-		char *buf)
-{
-	struct gendisk *disk = dev_to_disk(dev);
-	struct hd_struct *hd = dev_to_part(dev);
-	int cpu;
-	unsigned int nread, nwrite;
-	int ret;
-
-	cpu = part_stat_lock();
-	part_round_stats(cpu, hd);
-	part_stat_unlock();
-	nread = part_in_flight_read(hd);
-	nwrite = part_in_flight_write(hd);
-
-	ret = sprintf(buf, "rc %lu rmb %lu "
-			"wc %lu wmb %lu dc %lu dmb %lu "
-			"inp %u %u "
-			"iot %u %llu \n",
-			part_stat_read(hd, ios[READ]),
-			SEC2MB(part_stat_read(hd, sectors[READ])),
-
-			part_stat_read(hd, ios[WRITE]) -
-			part_stat_read(hd, discard_ios) - part_stat_read(hd, flush_ios),
-			SEC2MB(part_stat_read(hd, sectors[WRITE])) -
-			SEC2MB(part_stat_read(hd, discard_sectors)),
-			part_stat_read(hd, discard_ios),
-			SEC2MB(part_stat_read(hd, discard_sectors)),
-
-			nread,
-			nwrite,
-
-			jiffies_to_msecs(part_stat_read(hd, io_ticks)),
-			disk->queue->in_flight_time / USEC_PER_MSEC);
-
-	return ret;
-}
-
-static ssize_t iomon_store(struct device *dev,
-		struct device_attribute *attr,
-		const char *buf, size_t count)
-{
-	struct gendisk *disk;
-	struct hd_struct *hd = dev_to_part(dev);
-	int cpu;
-	unsigned int nread, nwrite;
-	char action[2];
-	char name[80];
-
-	sscanf(buf, "%1s %79s ", action, name);
-
-	cpu = part_stat_lock();
-	part_round_stats(cpu, hd);
-	part_stat_unlock();
-	nread = part_in_flight_read(hd);
-	nwrite = part_in_flight_write(hd);
-
-	if(!strcmp(action, "c") || !strcmp(action, "s") || !strcmp(action, "e")) {
-		disk = dev_to_disk(dev);
-		ologk("rc %lu rmb %lu "
-				"wc %lu wmb %lu dc %lu dmb %lu "
-				"inp %u %u "
-				"iot %u %llu ",
-				part_stat_read(hd, ios[READ]),
-				SEC2MB(part_stat_read(hd, sectors[READ])),
-
-				part_stat_read(hd, ios[WRITE]) -
-				part_stat_read(hd, discard_ios) - part_stat_read(hd, flush_ios),
-				SEC2MB(part_stat_read(hd, sectors[WRITE])) -
-				SEC2MB(part_stat_read(hd, discard_sectors)),
-				part_stat_read(hd, discard_ios),
-				SEC2MB(part_stat_read(hd, discard_sectors)),
-
-				nread,
-				nwrite,
-
-				jiffies_to_msecs(part_stat_read(hd, io_ticks)),
-				disk->queue->in_flight_time / USEC_PER_MSEC);
-	}
-
-	return count;
-}
-
-
 static DEVICE_ATTR(range, S_IRUGO, disk_range_show, NULL);
 static DEVICE_ATTR(ext_range, S_IRUGO, disk_ext_range_show, NULL);
 static DEVICE_ATTR(removable, S_IRUGO, disk_removable_show, NULL);
@@ -1256,7 +1172,6 @@ static DEVICE_ATTR(inflight, S_IRUGO, part_inflight_show, NULL);
 static DEVICE_ATTR(badblocks, S_IRUGO | S_IWUSR, disk_badblocks_show,
 		disk_badblocks_store);
 static DEVICE_ATTR(diskios, 0600, disk_ios_show, NULL);
-static DEVICE_ATTR(iomon, 0660, iomon_show, iomon_store);
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 static struct device_attribute dev_attr_fail =
 	__ATTR(make-it-fail, S_IRUGO|S_IWUSR, part_fail_show, part_fail_store);
@@ -1280,7 +1195,6 @@ static struct attribute *disk_attrs[] = {
 	&dev_attr_inflight.attr,
 	&dev_attr_badblocks.attr,
 	&dev_attr_diskios.attr,
-	&dev_attr_iomon.attr,
 #ifdef CONFIG_FAIL_MAKE_REQUEST
 	&dev_attr_fail.attr,
 #endif
@@ -1535,41 +1449,41 @@ static int iostats_show(struct seq_file *seqf, void *v)
 		nread = part_in_flight_read(hd);
 		nwrite = part_in_flight_write(hd);
 		seq_printf(seqf, "%4d %7d %s %lu %lu %lu %u "
-			   "%lu %lu %lu %u %u %u %u "
-			   /* added */
-			   "%lu %lu %lu %lu "
-			   "%u %llu %lu %lu %lu %u "
-			   "%lu.%03lu\n",
-			   MAJOR(part_devt(hd)), MINOR(part_devt(hd)),
-			   disk_name(gp, hd->partno, buf),
-			   part_stat_read(hd, ios[READ]),
-			   part_stat_read(hd, merges[READ]),
-			   part_stat_read(hd, sectors[READ]),
-			   jiffies_to_msecs(part_stat_read(hd, ticks[READ])),
+				"%lu %lu %lu %u %u %u %u "
+				/* added */
+				"%lu %lu %lu %lu "
+				"%u %llu %lu %lu %lu %u "
+				"%lu.%03lu\n",
+				MAJOR(part_devt(hd)), MINOR(part_devt(hd)),
+				disk_name(gp, hd->partno, buf),
+				part_stat_read(hd, ios[READ]),
+				part_stat_read(hd, merges[READ]),
+				part_stat_read(hd, sectors[READ]),
+				jiffies_to_msecs(part_stat_read(hd, ticks[READ])),
 
-			   part_stat_read(hd, ios[WRITE]),
-			   part_stat_read(hd, merges[WRITE]),
-			   part_stat_read(hd, sectors[WRITE]),
-			   jiffies_to_msecs(part_stat_read(hd, ticks[WRITE])),
-			   /*part_in_flight(hd),*/
-			   nread + nwrite,
-			   jiffies_to_msecs(part_stat_read(hd, io_ticks)),
-			   jiffies_to_msecs(part_stat_read(hd, time_in_queue)),
-			   /* followings are added */
-			   part_stat_read(hd, discard_ios),
-			   part_stat_read(hd, discard_sectors),
-			   part_stat_read(hd, flush_ios),
-			   gp->queue->flush_ios,
+				part_stat_read(hd, ios[WRITE]),
+				part_stat_read(hd, merges[WRITE]),
+				part_stat_read(hd, sectors[WRITE]),
+				jiffies_to_msecs(part_stat_read(hd, ticks[WRITE])),
+				/*part_in_flight(hd),*/
+				nread + nwrite,
+				jiffies_to_msecs(part_stat_read(hd, io_ticks)),
+				jiffies_to_msecs(part_stat_read(hd, time_in_queue)),
+				/* followings are added */
+				part_stat_read(hd, discard_ios),
+				part_stat_read(hd, discard_sectors),
+				part_stat_read(hd, flush_ios),
+				gp->queue->flush_ios,
 
-			   nread,
-			   gp->queue->in_flight_time / USEC_PER_MSEC,
-			   PG2KB(thresh),
-			   PG2KB(bdi->last_thresh),
-			   PG2KB(bdi->last_nr_dirty),
-			   jiffies_to_msecs(bdi->paused_total),
+				nread,
+				gp->queue->in_flight_time / USEC_PER_MSEC,
+				PG2KB(thresh),
+				PG2KB(bdi->last_thresh),
+				PG2KB(bdi->last_nr_dirty),
+				jiffies_to_msecs(bdi->paused_total),
 
-			   (unsigned long)(uptime / 1000),
-			   (unsigned long)(uptime % 1000));
+				(unsigned long)(uptime / 1000),
+				(unsigned long)(uptime % 1000));
 	}
 	disk_part_iter_exit(&piter);
 
@@ -1577,10 +1491,10 @@ static int iostats_show(struct seq_file *seqf, void *v)
 }
 
 static const struct seq_operations iostats_op = {
-	.start	= disk_seqf_start,
-	.next	= disk_seqf_next,
-	.stop	= disk_seqf_stop,
-	.show	= iostats_show
+	.start  = disk_seqf_start,
+	.next   = disk_seqf_next,
+	.stop   = disk_seqf_stop,
+	.show   = iostats_show
 };
 
 static int iostats_open(struct inode *inode, struct file *file)
@@ -1589,10 +1503,10 @@ static int iostats_open(struct inode *inode, struct file *file)
 }
 
 static const struct file_operations proc_iostats_operations = {
-	.open		= iostats_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= seq_release,
+	.open           = iostats_open,
+	.read           = seq_read,
+	.llseek         = seq_lseek,
+	.release        = seq_release,
 };
 
 static int __init proc_genhd_init(void)
@@ -2056,8 +1970,7 @@ static void disk_check_events(struct disk_events *ev,
 	}
 #else
 	if (nr_events)
-		kobject_uevent_env(&disk_to_dev(disk)->kobj,
-				KOBJ_CHANGE, envp);
+		kobject_uevent_env(&disk_to_dev(disk)->kobj, KOBJ_CHANGE, envp);
 #endif
 }
 

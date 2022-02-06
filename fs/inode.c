@@ -21,8 +21,6 @@
 #include <trace/events/writeback.h>
 #include "internal.h"
 
-#include <crypto/fmp.h>
-
 /*
  * Inode locking rules:
  *
@@ -193,11 +191,6 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 #if defined(CONFIG_SDP) && !defined(CONFIG_FSCRYPT_SDP)
 	mapping->userid = 0;
 #endif
-	mapping->fmp_ci.iv = NULL;
-	memset(mapping->fmp_ci.key, 0, MAX_KEY_SIZE);
-	mapping->fmp_ci.key_length = 0;
-	mapping->fmp_ci.private_algo_mode = 0;
-
 	inode->i_private = NULL;
 	inode->i_mapping = mapping;
 	INIT_HLIST_HEAD(&inode->i_dentry);	/* buggered by rcu freeing */
@@ -209,7 +202,6 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_fsnotify_mask = 0;
 #endif
 	inode->i_flctx = NULL;
-
 	this_cpu_inc(nr_inodes);
 
 	return 0;
@@ -265,7 +257,6 @@ void __destroy_inode(struct inode *inode)
 	if (inode->i_default_acl && !is_uncached_acl(inode->i_default_acl))
 		posix_acl_release(inode->i_default_acl);
 #endif
-
 	this_cpu_dec(nr_inodes);
 }
 EXPORT_SYMBOL(__destroy_inode);
@@ -1824,8 +1815,13 @@ int file_remove_privs(struct file *file)
 	int kill;
 	int error = 0;
 
-	/* Fast path for nothing security related */
-	if (IS_NOSEC(inode))
+	/*
+	 * Fast path for nothing security related.
+	 * As well for non-regular files, e.g. blkdev inodes.
+	 * For example, blkdev_write_iter() might get here
+	 * trying to remove privs which it is not allowed to.
+	 */
+	if (IS_NOSEC(inode) || !S_ISREG(inode->i_mode))
 		return 0;
 
 	kill = dentry_needs_remove_privs(dentry);

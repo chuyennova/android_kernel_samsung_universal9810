@@ -72,12 +72,9 @@ static void sensor_3m3_set_integration_max_margin(u32 mode, cis_shared_data *cis
 	switch (mode) {
 		case SENSOR_3M3_4032X3024_30FPS:
 		case SENSOR_3M3_4032X2268_30FPS:
-		case SENSOR_3M3_4032X1960_30FPS:
-		case SENSOR_3M3_3024X3024_30FPS:
 		case SENSOR_3M3_2016X1512_30FPS:
-		case SENSOR_3M3_1504X1504_30FPS:
 		case SENSOR_3M3_1920X1080_60FPS:
-		case SENSOR_3M3_1344X756_120FPS:
+		case SENSOR_3M3_1008X756_120FPS:
 		case SENSOR_3M3_2016X1134_30FPS:
 			cis_data->max_margin_coarse_integration_time = SENSOR_3M3_COARSE_INTEGRATION_TIME_MAX_MARGIN;
 			dbg_sensor(1, "max_margin_coarse_integration_time(%d)\n",
@@ -475,12 +472,12 @@ int sensor_3m3_cis_update_crop_region(struct v4l2_subdev *subdev)
 		return -1;
 	}
 
-	if (device->cfg->mode == SENSOR_3M3_1344X756_120FPS) {
+	if (device->cfg->mode == SENSOR_3M3_1008X756_120FPS) {
 		warn("skip tele shift in fast ae sensor mode");
 		return 0;
 	}
 
-	fimc_is_sec_get_cal_buf(&cal_buf);
+	fimc_is_sec_get_cal_buf(&cal_buf, ROM_ID_REAR);
 
 	dummy_flag = cal_buf[FROM_REAR2_FLAG_DUMMY_ADDR];
 	crop_num = cal_buf[FROM_REAR2_IMAGE_CROP_NUM_ADDR];
@@ -529,15 +526,12 @@ static void sensor_3m3_cis_set_paf_stat_enable(u32 mode, cis_shared_data *cis_da
 	switch (mode) {
 	case SENSOR_3M3_4032X3024_30FPS:
 	case SENSOR_3M3_4032X2268_30FPS:
-	case SENSOR_3M3_4032X1960_30FPS:
-	case SENSOR_3M3_3024X3024_30FPS:
 	case SENSOR_3M3_2016X1512_30FPS:
-	case SENSOR_3M3_1504X1504_30FPS:
 	case SENSOR_3M3_1920X1080_60FPS:
 	case SENSOR_3M3_2016X1134_30FPS:
 		cis_data->is_data.paf_stat_enable = true;
 		break;
-	case SENSOR_3M3_1344X756_120FPS:
+	case SENSOR_3M3_1008X756_120FPS:
 	default:
 		cis_data->is_data.paf_stat_enable = false;
 		break;
@@ -593,9 +587,7 @@ int sensor_3m3_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 	/* dual sync for live focus */
 	if (device->image.framerate == 24
 		&& (mode == SENSOR_3M3_4032X3024_30FPS
-			|| mode == SENSOR_3M3_4032X2268_30FPS
-			|| mode == SENSOR_3M3_4032X1960_30FPS
-			|| mode == SENSOR_3M3_3024X3024_30FPS)) {
+			|| mode == SENSOR_3M3_4032X2268_30FPS)) {
 		info("[3M3] dual sync setting for live focus");
 		fimc_is_sensor_write16(client, 0x30DA, 0x00A9);
 		fimc_is_sensor_write16(client, 0x30DC, 0x00A9);
@@ -859,7 +851,7 @@ int sensor_3m3_cis_stream_on(struct v4l2_subdev *subdev)
 #endif
 
 	/* Sensor stream on */
-	fimc_is_sensor_write16(client, 0x0100, 0x0100);
+	fimc_is_sensor_write16(client, 0x0100, 0x0103);
 
 #if 0 /* FIXME */
 	/* WDR */
@@ -897,8 +889,6 @@ int sensor_3m3_cis_stream_on(struct v4l2_subdev *subdev)
 	switch (mode) {
 	case SENSOR_3M3_4032X3024_30FPS:
 	case SENSOR_3M3_4032X2268_30FPS:
-	case SENSOR_3M3_4032X1960_30FPS:
-	case SENSOR_3M3_3024X3024_30FPS:
 		cis->cis_data->min_sync_frame_us_time = cis->cis_data->min_frame_us_time = 33333;
 		break;
 	default:
@@ -1985,12 +1975,12 @@ static int sensor_3m3_cis_update_pdaf_tail_size(struct v4l2_subdev *subdev, stru
 		return -1;
 	}
 
-	if (select->mode == SENSOR_3M3_1344X756_120FPS) {
+	if (select->mode == SENSOR_3M3_1008X756_120FPS) {
 		info("skip tele shift in fast ae sensor mode\n");
 		return 0;
 	}
 
-	fimc_is_sec_get_cal_buf(&cal_buf);
+	fimc_is_sec_get_cal_buf(&cal_buf, ROM_ID_REAR);
 
 #ifdef TEST_SHIFT_CROP
 	cal_buf[FROM_REAR2_FLAG_DUMMY_ADDR] = 7;
@@ -2024,14 +2014,6 @@ static int sensor_3m3_cis_update_pdaf_tail_size(struct v4l2_subdev *subdev, stru
 	case SENSOR_3M3_4032X3024_30FPS:
 	case SENSOR_3M3_2016X1512_30FPS:
 		width = 124;
-		height = 736;
-		break;
-	case SENSOR_3M3_4032X1960_30FPS:
-		width = 124;
-		height = 480;
-		break;
-	case SENSOR_3M3_3024X3024_30FPS:
-		width = 96;
 		height = 736;
 		break;
 	case SENSOR_3M3_1920X1080_60FPS:
@@ -2097,7 +2079,6 @@ static struct fimc_is_cis_ops cis_ops = {
 #ifdef CAMERA_REAR2_SENSOR_SHIFT_CROP
 	.cis_update_pdaf_tail_size = sensor_3m3_cis_update_pdaf_tail_size,
 #endif
-	.cis_check_rev = sensor_3m3_cis_check_rev,
 };
 
 static int cis_3m3_probe(struct i2c_client *client,
@@ -2226,12 +2207,6 @@ static int cis_3m3_probe(struct i2c_client *client,
 
 	cis->use_dgain = true;
 	cis->hdr_ctrl_by_again = false;
-
-	ret = of_property_read_string(dnode, "setfile", &setfile);
-	if (ret) {
-		err("setfile index read fail(%d), take default setfile!!", ret);
-		setfile = "default";
-	}
 
 	v4l2_i2c_subdev_init(subdev_cis, client, &subdev_ops);
 	v4l2_set_subdevdata(subdev_cis, cis);

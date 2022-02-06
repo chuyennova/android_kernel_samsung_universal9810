@@ -14,9 +14,10 @@
 #include "pnode.h"
 
 #ifdef CONFIG_RKP_NS_PROT
-void rkp_set_mnt_flags(struct vfsmount *mnt,int flags);
-void rkp_reset_mnt_flags(struct vfsmount *mnt,int flags);
+void rkp_set_mnt_flags(struct vfsmount *mnt, int flags);
+void rkp_reset_mnt_flags(struct vfsmount *mnt, int flags);
 #endif
+
 /* return the next shared peer mount of @p */
 static inline struct mount *next_peer(struct mount *p)
 {
@@ -149,8 +150,7 @@ void change_mnt_propagation(struct mount *mnt, int type)
 #else
 			mnt->mnt.mnt_flags |= MNT_UNBINDABLE;
 #endif
-		}
-		else {
+		} else {
 #ifdef CONFIG_RKP_NS_PROT
 			rkp_reset_mnt_flags(mnt->mnt,MNT_UNBINDABLE);
 #else
@@ -687,44 +687,28 @@ int propagate_umount(struct list_head *list)
 	return 0;
 }
 
-/*
- *  Iterates over all slaves, and slaves of slaves.
- */
-static struct mount *next_descendent(struct mount *root, struct mount *cur)
-{
-	if (!IS_MNT_NEW(cur) && !list_empty(&cur->mnt_slave_list))
-		return first_slave(cur);
-	do {
-		struct mount *master = cur->mnt_master;
-
-		if (!master || cur->mnt_slave.next != &master->mnt_slave_list) {
-			struct mount *next = next_slave(cur);
-
-			return (next == root) ? NULL : next;
-		}
-		cur = master;
-	} while (cur != root);
-	return NULL;
-}
-
 void propagate_remount(struct mount *mnt)
 {
-	struct mount *m = mnt;
+	struct mount *parent = mnt->mnt_parent;
+	struct mount *p = mnt, *m;
 #ifdef CONFIG_RKP_NS_PROT
 	struct super_block *sb = mnt->mnt->mnt_sb;
 #else
 	struct super_block *sb = mnt->mnt.mnt_sb;
 #endif
 
-	if (sb->s_op->copy_mnt_data) {
-		m = next_descendent(mnt, m);
-		while (m) {
+	if (!sb->s_op->copy_mnt_data)
+		return;
+	for (p = propagation_next(parent, parent); p;
+				p = propagation_next(p, parent)) {
 #ifdef CONFIG_RKP_NS_PROT
+		m = __lookup_mnt(p->mnt, mnt->mnt_mountpoint);
+		if (m)
 			sb->s_op->copy_mnt_data(m->mnt->data, mnt->mnt->data);
 #else
+		m = __lookup_mnt(&p->mnt, mnt->mnt_mountpoint);
+		if (m)
 			sb->s_op->copy_mnt_data(m->mnt.data, mnt->mnt.data);
 #endif
-			m = next_descendent(mnt, m);
-		}
 	}
 }

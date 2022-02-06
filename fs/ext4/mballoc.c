@@ -26,6 +26,7 @@
 #include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/nospec.h>
 #include <linux/backing-dev.h>
 #include <trace/events/ext4.h>
 
@@ -750,7 +751,6 @@ void ext4_mb_generate_buddy(struct super_block *sb,
 	grp->bb_fragments = fragments;
 
 	if (free != grp->bb_free) {
-		/* for more specific debugging, sangwoo2.lee */
 		struct ext4_group_desc *desc;
 		ext4_fsblk_t bitmap_blk;
 
@@ -758,7 +758,7 @@ void ext4_mb_generate_buddy(struct super_block *sb,
 		bitmap_blk = ext4_block_bitmap(sb, desc);
 
 		print_block_data(sb, bitmap_blk, bitmap, 0, EXT4_BLOCK_SIZE(sb));
-		/* for more specific debugging */
+
 		ext4_grp_locked_error(sb, group, 0, 0,
 				      "block bitmap and bg descriptor "
 				      "inconsistent: %u vs %u free clusters",
@@ -1465,8 +1465,8 @@ static void mb_free_blocks(struct inode *inode, struct ext4_buddy *e4b,
 
 	if (unlikely(block != -1)) {
 		struct ext4_sb_info *sbi = EXT4_SB(sb);
-		/* for debugging, sangwoo2.lee */
 		struct ext4_group_desc *desc;
+
 		ext4_fsblk_t blocknr, bitmap_blk;
 
 		desc = ext4_get_group_desc(sb, e4b->bd_group, NULL);
@@ -1477,7 +1477,7 @@ static void mb_free_blocks(struct inode *inode, struct ext4_buddy *e4b,
 
 		print_block_data(sb, bitmap_blk, e4b->bd_bitmap, 0
 				, EXT4_BLOCK_SIZE(sb));
-		/* for debugging */
+
 		ext4_grp_locked_error(sb, e4b->bd_group,
 				inode ? inode->i_ino : 0, blocknr,
 				"freeing already freed block "
@@ -2158,7 +2158,8 @@ ext4_mb_regular_allocator(struct ext4_allocation_context *ac)
 		 * This should tell if fe_len is exactly power of 2
 		 */
 		if ((ac->ac_g_ex.fe_len & (~(1 << (i - 1)))) == 0)
-			ac->ac_2order = i - 1;
+			ac->ac_2order = array_index_nospec(i - 1,
+							   sb->s_blocksize_bits + 2);
 	}
 
 	/* if stream allocation is enabled, use global goal */

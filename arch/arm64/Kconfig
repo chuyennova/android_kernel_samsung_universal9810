@@ -974,19 +974,6 @@ config ARM64_SW_TTBR0_PAN
 	  zeroed area and reserved ASID. The user access routines
 	  restore the valid TTBR0_EL1 temporarily.
 
-menu "JOP Attack Prevention"
-
-config RKP_CFP_JOPP
-	bool "Function pointer jumps to function entries only."
-	default n
-
-config RKP_CFP_JOPP_MAGIC
-	hex
-	depends on RKP_CFP_JOPP
-	default "0x00be7bad"
-
-endmenu
-
 menu "ARMv8.1 architectural features"
 
 config ARM64_HW_AFDBM
@@ -1079,13 +1066,6 @@ config ARM64_MODULE_PLTS
 	bool
 	select ARM64_MODULE_CMODEL_LARGE
 	select HAVE_MOD_ARCH_SPECIFIC
-
-config RELOCATABLE_KERNEL
-	bool "set kernel to relocatable in both virtual and physical address"
-	default n
-	help
-	  This configuare will allow you to config the kernel into position
-	  independent kernel, with '--PIE' insert into LD script.
 
 config RELOCATABLE
 	bool
@@ -1238,33 +1218,12 @@ config BUILD_ARM64_APPENDED_KERNEL_IMAGE_NAME
 	default "Image.gz-dtb" if IMG_GZ_DTB
 	default "Image-dtb" if IMG_DTB
 
-config LOD_SEC
-	bool "kernel security re-enforcement for Linux On Dex, including cap re-check and seccomp report"
-	default n
-
-config TIMA
-	bool "Enable TIMA(Trustzone based Integrity Measurement Archtecture) feature"
-	default n
-
-config TIMA_LKMAUTH
-	bool "Enable LKM authentication by TIMA"
-	depends on MODULES
+config BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES
+	string "Default dtb names"
+	depends on BUILD_ARM64_APPENDED_DTB_IMAGE
 	help
-	  TIMA authenticates loaded kernel modules. Disable it if you don't
-	  want TIMA enabled.
-
-config TIMA_LKM_BLOCK
-	bool "Block LKM by TIMA"
-	help
-	  LKM is disapproved by Samsung security policy.
-
-config TIMA_LKMAUTH_CODE_PROT
-	bool "Support kernel Module"
-	depends on MODULES
-	default n
-	help
-	  When enabled, this feature will mark all Executable sections in an
-	  LKM as RO
+	  Space separated list of names of dtbs to append when
+	  building a concatenated Image.gz-dtb.
 
 config UH
 	bool "Enable micro hypervisor feature"
@@ -1347,12 +1306,37 @@ config KDP_TEST
 	help
 	  enable KDP test.
 
-config BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES
-	string "Default dtb names"
-	depends on BUILD_ARM64_APPENDED_DTB_IMAGE
+config UH_LKM_BLOCK
+	bool "Block LKM"
 	help
-	  Space separated list of names of dtbs to append when
-	  building a concatenated Image.gz-dtb.
+	  LKM is not allowed by Samsung security policy.
+
+config RKP_CFP
+	bool "JOPP and ROPP"
+	default n
+	help
+	  Control flow protection, including both JOPP and ROPP. Please do NOT
+	  set this CONFIG, JOPP/ROPP will select it.
+
+config RKP_CFP_JOPP
+	bool "JOP Prevention"
+	select RKP_CFP
+	# depends on TIMA_RKP
+	default n
+	help
+	  Restrict function pointer jumps to function entry points only.
+
+config RKP_CFP_JOPP_MAGIC
+	hex
+	depends on RKP_CFP && RKP_CFP_JOPP
+	default "0x00be7bad"
+
+config RKP_CFP_TEST
+	bool "test file, only include in ENG build"
+	depends on RKP_CFP
+	default n
+	help
+	  For test only.
 
 endmenu
 
@@ -1382,6 +1366,10 @@ config COMPAT
 config SYSVIPC_COMPAT
 	def_bool y
 	depends on COMPAT && SYSVIPC
+
+config KEYS_COMPAT
+	def_bool y
+	depends on COMPAT && KEYS
 
 endmenu
 

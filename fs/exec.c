@@ -77,6 +77,20 @@
 #ifdef CONFIG_LOD_SEC
 #define rkp_is_lod(x) ((x->cred->type)>>3 & 1)
 #endif /*CONFIG_LOD_SEC*/
+static RKP_RO_AREA unsigned int __is_kdp_recovery;
+
+static int __init boot_recovery(char *str)
+{
+	int temp = 0;
+
+	if (get_option(&str, &temp)) {
+		__is_kdp_recovery = temp;
+		return 0;
+	}
+
+	return -EINVAL;
+}
+early_param("androidboot.boot_recovery", boot_recovery);
 #endif /*CONFIG_RKP_KDP*/
 
 int suid_dumpable = 0;
@@ -950,7 +964,7 @@ int kernel_read_file(struct file *file, void **buf, loff_t *size,
 				    i_size - pos);
 		if (bytes < 0) {
 			ret = bytes;
-			goto out;
+			goto out_free;
 		}
 
 		if (bytes == 0)
@@ -1272,15 +1286,15 @@ extern struct super_block *sys_sb;	/* pointer to superblock */
 extern struct super_block *odm_sb;	/* pointer to superblock */
 extern struct super_block *vendor_sb;	/* pointer to superblock */
 extern struct super_block *rootfs_sb;	/* pointer to superblock */
-extern int is_recovery;
-
+extern struct super_block *art_sb;	/* pointer to superblock */
+extern int __check_verifiedboot;
 static int kdp_check_sb_mismatch(struct super_block *sb) 
 {	
-	if(is_recovery) {
+	if(__is_kdp_recovery || __check_verifiedboot) {
 		return 0;
 	}
 	if((sb != rootfs_sb) && (sb != sys_sb)
-		&& (sb != odm_sb) && (sb != vendor_sb)) {
+		&& (sb != odm_sb) && (sb != vendor_sb) && (sb != art_sb)) {
 		return 1;
 	}
 	return 0;
@@ -1299,8 +1313,8 @@ static int invalid_drive(struct linux_binprm * bprm)
 	sb = vfsmnt->mnt_sb;
 
 	if(kdp_check_sb_mismatch(sb)) {
-		printk("\n Superblock Mismatch #%s# vfsmnt #%p#sb #%p:%p:%p:%p:%p#\n",
-					bprm->filename, vfsmnt, sb, rootfs_sb, sys_sb, odm_sb, vendor_sb);
+		printk("\n Superblock Mismatch #%s# vfsmnt #%p#sb #%p:%p:%p:%p:%p:%p#\n",
+					bprm->filename, vfsmnt, sb, rootfs_sb, sys_sb, odm_sb, vendor_sb, art_sb);
 		return 1;
 	}
 
@@ -1347,7 +1361,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	if(rkp_cred_enable &&
 		is_rkp_priv_task() && 
 		invalid_drive(bprm)) {
-		panic("\n KDP_NS_PROT: Illegal Execution of file #%s#\n",bprm->filename);
+		//panic("\n KDP_NS: Illegal Execution of file #%s#\n", bprm->filename);
 	}
 #endif /*CONFIG_RKP_NS_PROT*/
 	retval = exec_mmap(bprm->mm);
@@ -1715,8 +1729,8 @@ int search_binary_handler(struct linux_binprm *bprm)
 		if (printable(bprm->buf[0]) && printable(bprm->buf[1]) &&
 		    printable(bprm->buf[2]) && printable(bprm->buf[3]))
 			return retval;
-		if (request_module(
-			      "binfmt-%04x", *(ushort *)(bprm->buf + 2)) < 0)
+		if (request_module("binfmt-%04x",
+					*(ushort *)(bprm->buf + 2)) < 0)
 			return retval;
 		need_retry = false;
 		goto retry;
@@ -1789,8 +1803,7 @@ static int rkp_restrict_fork(struct filename *path)
 {
 	struct cred *shellcred;
 
-	if (!strcmp(path->name, "/system/bin/patchoat") ||
-	    !strcmp(path->name, "/system/bin/idmap2")) {
+	if(!strcmp(path->name,"/system/bin/patchoat")){
 		return 0 ;
 	}
         /* If the Process is from Linux on Dex, 
@@ -2033,7 +2046,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	current->fs->in_exec = 0;
 	current->in_execve = 0;
 	acct_update_integrals(current);
-	task_numa_free(current);
+	task_numa_free(current, false);
 	free_bprm(bprm);
 	kfree(pathbuf);
 	putname(filename);

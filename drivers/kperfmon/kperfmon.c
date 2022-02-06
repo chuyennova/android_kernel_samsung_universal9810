@@ -17,12 +17,7 @@
 #include <linux/vmalloc.h>
 #endif
 #include <asm/uaccess.h>
-
-#if defined(CONFIG_ARCH_EXYNOS)
-#include <../../../../../../system/core/liblog/include/log/perflog.h>
-#elif defined(CONFIG_ARCH_QCOM)
-#include <../../../../../system/core/liblog/include/log/perflog.h>
-#endif
+#include "perflog.h"
 
 typedef unsigned char byte;
 

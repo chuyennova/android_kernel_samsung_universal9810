@@ -2589,15 +2589,15 @@ int security_fs_use(struct super_block *sb)
 		}
 		sbsec->sid = c->sid[0];
 	} else {
-			rc = __security_genfs_sid(fstype, "/", SECCLASS_DIR,
-						  &sbsec->sid);
-			if (rc) {
-				sbsec->behavior = SECURITY_FS_USE_NONE;
-				rc = 0;
-			} else {
-				sbsec->behavior = SECURITY_FS_USE_GENFS;
-			}
+		rc = __security_genfs_sid(fstype, "/", SECCLASS_DIR,
+					  &sbsec->sid);
+		if (rc) {
+			sbsec->behavior = SECURITY_FS_USE_NONE;
+			rc = 0;
+		} else {
+			sbsec->behavior = SECURITY_FS_USE_GENFS;
 		}
+	}
 
 out:
 	read_unlock(&policy_rwlock);

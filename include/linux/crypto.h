@@ -49,7 +49,9 @@
 #define CRYPTO_ALG_TYPE_BLKCIPHER	0x00000004
 #define CRYPTO_ALG_TYPE_ABLKCIPHER	0x00000005
 #define CRYPTO_ALG_TYPE_SKCIPHER	0x00000005
+#define CRYPTO_ALG_TYPE_DISKCIPHER      0x00000007
 #define CRYPTO_ALG_TYPE_GIVCIPHER	0x00000006
+#define CRYPTO_ALG_TYPE_DISKCIPHER      0x00000007
 #define CRYPTO_ALG_TYPE_KPP		0x00000008
 #define CRYPTO_ALG_TYPE_ACOMPRESS	0x0000000a
 #define CRYPTO_ALG_TYPE_SCOMPRESS	0x0000000b
@@ -111,6 +113,11 @@
  * calling it first, i.e. there is a default key.
  */
 #define CRYPTO_ALG_OPTIONAL_KEY		0x00004000
+
+/*
+ * Don't trigger module loading
+ */
+#define CRYPTO_NOLOAD			0x00008000
 
 /*
  * Transform masks and values (for crt_flags).

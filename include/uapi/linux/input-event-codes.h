@@ -336,11 +336,9 @@
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
-#define KEY_HOT			252    /* Intelligence Key */
+#define KEY_HOT			252	/* Intelligence Key */
 #define KEY_WAKEUP_UNLOCK	253	/* Wake-up to recent view, ex: AOP */
-#define KEY_RECENT   		254
-
-
+#define KEY_RECENT   254
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
@@ -528,6 +526,8 @@
 #define KEY_SIDE_GESTURE_RIGHT	0x1ca
 #define KEY_SIDE_GESTURE_LEFT	0x1cb
 
+#define KEY_RESET		0x1cd
+
 #define KEY_FN			0x1d0
 #define KEY_FN_ESC		0x1d1
 #define KEY_FN_F1		0x1d2
@@ -652,7 +652,6 @@
  * e.g. teletext or data broadcast application (MHEG, MHP, HbbTV, etc.)
  */
 #define KEY_DATA			0x277
-#define KEY_EMERGENCY			0x2a0
 #define KEY_INT_CANCEL		0x2be	/* for touch event skip */
 #define KEY_WINK			0x2bf	/* Intelligence Key */
 
@@ -752,6 +751,15 @@
 #define ABS_VOLUME		0x20
 
 #define ABS_MISC		0x28
+
+/*
+ * 0x2e is reserved and should not be used in input drivers.
+ * It was used by HID as ABS_MISC+6 and userspace needs to detect if
+ * the next ABS_* event is correct or is just ABS_MISC + n.
+ * We define here ABS_RESERVED so userspace can rely on it and detect
+ * the situation described above.
+ */
+#define ABS_RESERVED		0x2e
 
 #define ABS_MT_SLOT		0x2f	/* MT slot being modified */
 #define ABS_MT_TOUCH_MAJOR	0x30	/* Major axis of touching ellipse */

@@ -46,6 +46,7 @@
 #define QUERY_DESC_HDR_SIZE       2
 #define QUERY_OSF_SIZE            (GENERAL_UPIU_REQUEST_SIZE - \
 					(sizeof(struct utp_upiu_header)))
+#define RESPONSE_UPIU_SENSE_DATA_LENGTH	18
 
 #define UPIU_HEADER_DWORD(byte3, byte2, byte1, byte0)\
 			cpu_to_be32((byte3 << 24) | (byte2 << 16) |\
@@ -192,12 +193,7 @@ enum desc_idn {
 	QUERY_DESC_IDN_POWER		= 0x8,
 	QUERY_DESC_IDN_HEALTH           = 0x9,
 	QUERY_DESC_IDN_RFU_2            = 0xA,
-#ifdef CONFIG_JOURNAL_DATA_TAG
-	QUERY_DESC_IDN_VENDOR		= 0xFF,
-	QUERY_DESC_IDN_MAX		= 0x100,
-#else
 	QUERY_DESC_IDN_MAX,
-#endif
 };
 
 enum desc_header_offset {
@@ -220,9 +216,6 @@ enum ufs_desc_max_size {
 	QUERY_DESC_POWER_MAX_SIZE		= 0x62,
 	QUERY_DESC_HEALTH_MAX_SIZE		= 0x25,
 	QUERY_DESC_RFU_MAX_SIZE			= 0x00,
-#ifdef CONFIG_JOURNAL_DATA_TAG
-	QUERY_DESC_VENDOR_SPECIFIC_SIZE		= QUERY_DESC_MAX_SIZE,
-#endif
 };
 
 enum ufs_desc_def_size {
@@ -300,10 +293,6 @@ enum power_desc_param_offset {
 /* Exception event mask values */
 enum {
 	MASK_EE_STATUS		= 0xFFFF,
-#ifdef CONFIG_JOURNAL_DATA_TAG
-	MASK_EE_DYNCAP_EVENT	= (1 << 0),
-	MASK_EE_SYSPOOL_EVENT	= (1 << 1),
-#endif
 	MASK_EE_URGENT_BKOPS	= (1 << 2),
 };
 
@@ -494,7 +483,7 @@ struct utp_cmd_rsp {
 	__be32 residual_transfer_count;
 	__be32 reserved[4];
 	__be16 sense_data_len;
-	u8 sense_data[18];
+	u8 sense_data[RESPONSE_UPIU_SENSE_DATA_LENGTH];
 };
 
 /**

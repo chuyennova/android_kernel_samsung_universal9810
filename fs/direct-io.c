@@ -37,8 +37,7 @@
 #include <linux/uio.h>
 #include <linux/atomic.h>
 #include <linux/prefetch.h>
-
-#include <crypto/fmp.h>
+#include <linux/fscrypt.h>
 
 /*
  * How many user pages to map in one call to get_user_pages().  This determines
@@ -280,8 +279,8 @@ static ssize_t dio_complete(struct dio *dio, ssize_t ret, bool is_async)
 		 */
 		dio->iocb->ki_pos += transferred;
 
-		if (dio->op == REQ_OP_WRITE)
-			ret = generic_write_sync(dio->iocb,  transferred);
+		if (ret > 0 && dio->op == REQ_OP_WRITE)
+			ret = generic_write_sync(dio->iocb, ret);
 		dio->iocb->ki_complete(dio->iocb, ret, 0);
 	}
 
@@ -399,11 +398,27 @@ dio_bio_alloc(struct dio *dio, struct dio_submit *sdio,
  *
  * bios hold a dio reference between submit_bio and ->end_io.
  */
+#ifdef CONFIG_CRYPTO_DISKCIPHER
+static bool is_inode_filesystem_type(const struct inode *inode,
+					const char *fs_type)
+{
+	if (!inode || !fs_type)
+		return false;
+
+	if (!inode->i_sb)
+		return false;
+
+	if (!inode->i_sb->s_type)
+		return false;
+
+	return (strcmp(inode->i_sb->s_type->name, fs_type) == 0);
+}
+#endif
+
 static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 {
 	struct bio *bio = sdio->bio;
 	unsigned long flags;
-	struct inode *inode;
 
 	bio->bi_private = dio;
 
@@ -411,16 +426,23 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 	dio->refcount++;
 	spin_unlock_irqrestore(&dio->bio_lock, flags);
 
+#if defined(CONFIG_CRYPTO_DISKCIPHER)
+	if (dio->inode && fscrypt_has_encryption_key(dio->inode)) {
+		 /* device unit number for iv sector */
+		#define PG_DUN(i, p)	\
+			((((i)->i_ino & 0xffffffff) << 32) | ((p) & 0xffffffff))
+
+		if (is_inode_filesystem_type(dio->inode, "f2fs"))
+			fscrypt_set_bio(dio->inode, bio, PG_DUN(dio->inode,
+				(sdio->logical_offset_in_bio >> PAGE_SHIFT)));
+		else
+			fscrypt_set_bio(dio->inode, bio, 0);
+	}
+#endif
 	if (dio->is_async && dio->op == REQ_OP_READ && dio->should_dirty)
 		bio_set_pages_dirty(bio);
 
 	dio->bio_bdev = bio->bi_bdev;
-	inode = dio->inode;
-	bio->fmp_ci.bi_dio_inode = dio->inode;
-	bio->fmp_ci.private_enc_mode = EXYNOS_FMP_FILE_ENC;
-	bio->fmp_ci.private_algo_mode = inode->i_mapping->fmp_ci.private_algo_mode;
-	bio->fmp_ci.key = inode->i_mapping->fmp_ci.key;
-	bio->fmp_ci.key_length = inode->i_mapping->fmp_ci.key_length;
 
 	if (sdio->submit_io) {
 		sdio->submit_io(bio, dio->inode, sdio->logical_offset_in_bio);
@@ -625,6 +647,7 @@ static int get_more_blocks(struct dio *dio, struct dio_submit *sdio,
 	unsigned long fs_count;	/* Number of filesystem-sized blocks */
 	int create;
 	unsigned int i_blkbits = sdio->blkbits + sdio->blkfactor;
+	loff_t i_size;
 
 	/*
 	 * If there was a memory error and we've overwritten all the
@@ -654,8 +677,8 @@ static int get_more_blocks(struct dio *dio, struct dio_submit *sdio,
 		 */
 		create = dio->op == REQ_OP_WRITE;
 		if (dio->flags & DIO_SKIP_HOLES) {
-			if (fs_startblk <= ((i_size_read(dio->inode) - 1) >>
-							i_blkbits))
+			i_size = i_size_read(dio->inode);
+			if (i_size && fs_startblk <= (i_size - 1) >> i_blkbits)
 				create = 0;
 		}
 

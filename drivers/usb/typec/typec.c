@@ -878,7 +878,7 @@ static ssize_t data_role_store(struct device *dev,
 	}
 
 	mutex_lock(&port->port_type_lock);
-	if (port->cap->type != TYPEC_PORT_DRP) {
+	if (port->port_type != TYPEC_PORT_DRP) {
 		dev_dbg(dev, "port type fixed at \"%s\"",
 			     typec_port_types[port->port_type]);
 		ret = -EOPNOTSUPP;
@@ -939,7 +939,7 @@ static ssize_t power_role_store(struct device *dev,
 	}
 
 	mutex_lock(&port->port_type_lock);
-	if (port->cap->type != TYPEC_PORT_DRP) {
+	if (port->port_type != TYPEC_PORT_DRP) {
 		dev_dbg(dev, "port type fixed at \"%s\"",
 			     typec_port_types[port->port_type]);
 		ret = -EOPNOTSUPP;
