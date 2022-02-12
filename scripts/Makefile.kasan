@@ -39,4 +39,17 @@ else
    endif
 
 endif
+<<<<<<< HEAD
+=======
+
+# don't treat warnings as error (bcmdhd compile failure)
+CFLAGS_KASAN += -Wno-error
+
+ifdef CONFIG_KASAN_EXTRA
+CFLAGS_KASAN += $(call cc-option, -fsanitize-address-use-after-scope)
+endif
+
+CFLAGS_KASAN_NOSANITIZE := -fno-builtin
+
+>>>>>>> 7a9bc8f534bf (treewide: adapt os changes)
 endif
