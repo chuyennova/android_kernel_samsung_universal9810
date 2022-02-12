@@ -1,4 +1,13 @@
 ifdef CONFIG_KASAN
+# don't treat warnings as error (bcmdhd compile failure)
+CFLAGS_KASAN += -Wno-error
+
+ifdef CONFIG_KASAN_EXTRA
+CFLAGS_KASAN += $(call cc-option, -fsanitize-address-use-after-scope)
+endif
+
+CFLAGS_KASAN_NOSANITIZE := -fno-builtin
+
 ifdef CONFIG_KASAN_INLINE
 	call_threshold := 10000
 else
@@ -38,5 +47,4 @@ else
 	$(call cc-param,asan-instrument-allocas=1)
    endif
 
-endif
 endif
