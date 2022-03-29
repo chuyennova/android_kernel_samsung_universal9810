@@ -61,6 +61,7 @@ static struct sensor_info info_table[] = {
 	SENSOR_INFO_MOVE_DETECTOR,
 	SENSOR_INFO_CALL_GESTURE,
 	SENSOR_INFO_LED_COVER_EVENT,
+	SENSOR_INFO_AUTO_ROTATION,
 	SENSOR_INFO_POCKET_MODE_LITE,
 };
 
@@ -521,6 +522,13 @@ void report_scontext_data(struct ssp_data *data,
 void report_uncalib_accel_data(struct ssp_data *data, struct sensor_value *acceldata)
 {
 	report_iio_data(data, ACCEL_UNCALIB_SENSOR, acceldata);
+}
+
+void report_auto_rotation_data(struct ssp_data *data, struct sensor_value *auto_rotation_data)
+{
+	report_iio_data(data, AUTO_ROTATION_SENSOR, auto_rotation_data);
+	wake_lock_timeout(&data->ssp_wake_lock, 0.3*HZ);
+	pr_err("[SSP]: %s: %d ts: %llu", __func__, auto_rotation_data->auto_rotation_event, auto_rotation_data->timestamp);
 }
 
 #define THM_UP		0
