@@ -123,6 +123,8 @@
 #define SSP_HALL_IC_ON			"SSP:HALL_IC=1"
 #define SSP_HALL_IC_OFF			"SSP:HALL_IC=0"
 
+#define SSP_AUTO_ROTATION_ORIENTATION "SSP:AUTO_ROTATION_ORIENTATION="
+
 extern bool ssp_debug_time_flag;
 
 #define ssp_debug_time(format, ...) \
@@ -255,6 +257,7 @@ enum {
 #define MSG2SSP_AP_PROX_CAL_START	0x94
 #define MSG2SSP_HALL_IC_ON_OFF		0x96
 #define MSG2AP_INST_PROX_CAL_DONE	0x97
+#define MSG2SSP_AUTO_ROTATION_ORIENTATION 0x9A
 
 #define SH_MSG2AP_GYRO_CALIBRATION_START   0x43
 #define SH_MSG2AP_GYRO_CALIBRATION_STOP	0x44
@@ -554,6 +557,7 @@ struct sensor_value {
 		u8 call_gesture;
 		u8 move_detect;
 		u8 led_cover_event;
+		u8 auto_rotation_event;
 		u8 scontext_buf[SCONTEXT_DATA_SIZE];
 		struct {
 			u8 proximity_pocket_detect;
@@ -1130,6 +1134,7 @@ void report_wakeup_motion_data(struct ssp_data *data,struct sensor_value *wakeup
 void report_call_gesture_data(struct ssp_data *data, struct sensor_value *call_gesture_data);
 void report_move_detector_data(struct ssp_data *data, struct sensor_value *move_detector_data);
 void report_led_cover_event_data(struct ssp_data *data, struct sensor_value *led_cover_event_data);
+void report_auto_rotation_data(struct ssp_data *data, struct sensor_value *auto_rotation_data);
 void report_pocket_mode_lite_data(struct ssp_data *data, struct sensor_value *pocket_mode_lite_data);
 
 unsigned int get_module_rev(struct ssp_data *data);
