@@ -54,8 +54,8 @@ then
 	printf "Building G960\n"
 	make exynos9810-starlte_defconfig
 	make -j$(nproc --all)
-	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/G960zImage
-	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/G960dtb.img
+	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/starlte/zImage
+	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/starlte/dtb.img
 
 if [ -d $ZIP_ALT_DIR ] 
 then
@@ -64,16 +64,16 @@ then
 	sed -i 's/CONFIG_SECURITY_SELINUX_NEVER_ENFORCE=y/# CONFIG_SECURITY_SELINUX_NEVER_ENFORCE is not set/g' "$CUR_DIR"/.config
 	sed -i 's/CONFIG_HALL_NEW_NODE=y/# CONFIG_HALL_NEW_NODE is not set/g' "$CUR_DIR"/.config
 	make -j$(nproc --all)
-	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/G960zImage
-	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/G960dtb.img
+	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/starlte/zImage
+	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/starlte/dtb.img
 fi
 	
 	clean
 	printf "Building N960\n"
 	make exynos9810-crownlte_defconfig
 	make -j$(nproc --all)
-	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/N960zImage
-	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/N960dtb.img
+	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/crownlte/zImage
+	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/crownlte/dtb.img
 	
 if [ -d $ZIP_ALT_DIR ] 
 then
@@ -82,8 +82,8 @@ then
 	sed -i 's/CONFIG_SECURITY_SELINUX_NEVER_ENFORCE=y/# CONFIG_SECURITY_SELINUX_NEVER_ENFORCE is not set/g' "$CUR_DIR"/.config
 	sed -i 's/CONFIG_HALL_NEW_NODE=y/# CONFIG_HALL_NEW_NODE is not set/g' "$CUR_DIR"/.config
 	make -j$(nproc --all)
-	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/N960zImage
-	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/N960dtb.img
+	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/crownlte/zImage
+	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/crownlte/dtb.img
 fi
 	
 	clean
@@ -91,8 +91,8 @@ fi
 printf "Building G965\n"
 make exynos9810-star2lte_defconfig
 make -j$(nproc --all)
-cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/G965zImage
-cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/G965dtb.img
+cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/star2lte/zImage
+cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/star2lte/dtb.img
 
 if [ -d $ZIP_ALT_DIR ] 
 then
@@ -101,6 +101,6 @@ make exynos9810-star2lte_defconfig
 sed -i 's/CONFIG_SECURITY_SELINUX_NEVER_ENFORCE=y/# CONFIG_SECURITY_SELINUX_NEVER_ENFORCE is not set/g' "$CUR_DIR"/.config
 sed -i 's/CONFIG_HALL_NEW_NODE=y/# CONFIG_HALL_NEW_NODE is not set/g' "$CUR_DIR"/.config
 make -j$(nproc --all)
-cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/G965zImage
-cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/G965dtb.img
+cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/star2lte/zImage
+cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/star2lte/dtb.img
 fi
