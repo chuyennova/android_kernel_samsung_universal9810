@@ -28,6 +28,8 @@
 #include <linux/usb/manager/usb_typec_manager_notifier.h>
 #endif
 
+//#define DEBUG_FACTORY_APP_ENABLE
+
 #define VENDOR_NAME              "SEMTECH"
 #define MODEL_NAME               "SX9320"
 #define MODULE_NAME              "grip_sensor"
@@ -59,6 +61,9 @@
 #define NONE_ENABLE		-1
 #define IDLE_STATE		0
 #define TOUCH_STATE		1
+
+#define UNKNOWN_ON  1
+#define UNKNOWN_OFF 2
 
 #if IS_ENABLED(CONFIG_HALL_NEW_NODE)
 #define HALLIC_PATH	"/sys/class/sec/hall_ic/hall_detect"
@@ -129,6 +134,9 @@ struct sx9320_p {
 	atomic_t enable;
 
 	char hall_ic[6];
+	int is_unknown_mode;
+	int motion;
+	bool first_working;
 };
 
 static int sx9320_check_hallic_state(char *file_path, char hall_ic_status[])
@@ -314,6 +322,8 @@ static void sx9320_send_event(struct sx9320_p *data, u8 state)
 	else
 		input_report_rel(data->input, REL_MISC, 2);
 
+	input_report_rel(data->input, REL_X, data->is_unknown_mode);
+
 	input_sync(data->input);
 }
 
@@ -438,6 +448,7 @@ static void sx9320_check_status(struct sx9320_p *data, int enable)
 
 	if (data->skip_data == true) {
 		input_report_rel(data->input, REL_MISC, 2);
+		input_report_rel(data->input, REL_X, UNKNOWN_OFF);
 		input_sync(data->input);
 	} else if (status & (PHX_STATUS_REG << data->phen)) {
 		sx9320_send_event(data, ACTIVE);
@@ -498,6 +509,22 @@ static void sx9320_set_debug_work(struct sx9320_p *data, u8 enable,
 			msecs_to_jiffies(time_ms));
 	} else {
 		cancel_delayed_work_sync(&data->debug_work);
+	}
+}
+
+static void sx9320_enter_unknown_mode(struct sx9320_p *data)
+{
+	data->motion = 0;
+	data->first_working = false;
+	if (data->is_unknown_mode == UNKNOWN_OFF) {
+		data->is_unknown_mode = UNKNOWN_ON;
+		if (!data->skip_data) {
+			input_report_rel(data->input, REL_X, UNKNOWN_ON);
+			input_sync(data->input);
+		}
+		pr_info("[SX9320]: %s UNKNOWN Re-enter\n", __func__);
+	} else {
+		pr_info("[SX9320]: %s already UNKNOWN \n", __func__);
 	}
 }
 
@@ -656,8 +683,17 @@ static ssize_t sx9320_raw_data_show(struct device *dev,
 		data->diff_cnt = 0;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%d,%d,%u,%d,%d\n", data->capmain,
-		data->useful, data->offset, data->diff, data->avg);
+#ifdef DEBUG_FACTORY_APP_ENABLE
+	return snprintf(buf, PAGE_SIZE, "%ld/%s/%s,%ld,%u,%d,%d\n",
+		(long int)data->capMain,
+		data->is_unknown_mode == UNKNOWN_ON ? "unknown_enter" : "unknown_exit",
+		data->motion == 1 ? "smd_detect" : "smd_non_detect",
+		(long int)data->useful, data->offset, data->diff, data->avg);
+#else
+	return snprintf(buf, PAGE_SIZE, "%ld,%ld,%u,%d,%d\n",
+		(long int)data->capmain,
+		(long int)data->useful, data->offset, data->diff, data->avg);
+#endif
 }
 
 static ssize_t sx9320_threshold_show(struct device *dev,
@@ -750,6 +786,7 @@ static ssize_t sx9320_onoff_store(struct device *dev,
 		if (atomic_read(&data->enable) == ON) {
 			data->state = IDLE;
 			input_report_rel(data->input, REL_MISC, 2);
+			input_report_rel(data->input, REL_X, UNKNOWN_OFF);
 			input_sync(data->input);
 		}
 	} else {
@@ -757,6 +794,63 @@ static ssize_t sx9320_onoff_store(struct device *dev,
 	}
 
 	pr_info("[SX9320]: %s -%u\n", __func__, val);
+	return count;
+}
+
+static ssize_t sx9320_motion_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sx9320_p *data = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+		data->motion == 1 ? "smd_detect" : "smd_non_detect");
+}
+
+static ssize_t sx9320_motion_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	u8 val;
+	int ret;
+	struct sx9320_p *data = dev_get_drvdata(dev);
+
+	ret = kstrtou8(buf, 2, &val);
+	if (ret) {
+		pr_err("[SX9320]: %s - Invalid Argument\n", __func__);
+		return ret;
+	}
+
+	data->motion = val;
+
+	pr_info("[SX9320]: %s - %u\n", __func__, val);
+	return count;
+}
+static ssize_t sx9320_unknown_state_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sx9320_p *data = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+		(data->is_unknown_mode == UNKNOWN_ON) ? \
+		"unknown_enter" : "unknown_exit");
+}
+
+static ssize_t sx9320_unknown_state_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	u8 val;
+	int ret;
+	struct sx9320_p *data = dev_get_drvdata(dev);
+
+	ret = kstrtou8(buf, 2, &val);
+	if (ret) {
+		pr_err("[SX9320]: %s - Invalid Argument\n", __func__);
+		return ret;
+	}
+
+	data->is_unknown_mode = val > 0 ? UNKNOWN_ON : UNKNOWN_OFF;
+
+	pr_info("[SX9320]: %s - %u\n", __func__, val);
+
 	return count;
 }
 
@@ -1113,7 +1207,10 @@ static DEVICE_ATTR(phase, 0444, sx9320_phase_show, NULL);
 static DEVICE_ATTR(hysteresis, 0444, sx9320_hysteresis_show, NULL);
 static DEVICE_ATTR(irq_count, 0664,
 		sx9320_irq_count_show, sx9320_irq_count_store);
-
+static DEVICE_ATTR(motion, S_IRUGO | S_IWUSR | S_IWGRP,
+	sx9320_motion_show, sx9320_motion_store);
+static DEVICE_ATTR(unknown_state, S_IRUGO | S_IWUSR | S_IWGRP,
+	sx9320_unknown_state_show, sx9320_unknown_state_store);
 static DEVICE_ATTR(grip_flush, 0220, NULL, sx9320_grip_flush_store);
 
 static struct device_attribute *sensor_attrs[] = {
@@ -1147,6 +1244,8 @@ static struct device_attribute *sensor_attrs[] = {
 	&dev_attr_phase,
 	&dev_attr_hysteresis,
 	&dev_attr_irq_count,
+	&dev_attr_motion,
+	&dev_attr_unknown_state,
 	NULL,
 };
 
@@ -1240,17 +1339,26 @@ static void sx9320_touch_process(struct sx9320_p *data, u8 flag)
 	sx9320_read_ch_interrupt(data, status);
 
 	if (data->state == IDLE) {
-		if (status & (PHX_STATUS_REG << data->phen))
+		if (status & (PHX_STATUS_REG << data->phen)) {
+			if (data->is_unknown_mode == UNKNOWN_ON && data->motion)
+					data->first_working = true;
 			sx9320_send_event(data, ACTIVE);
-		else
+		} else {
 			pr_info("[SX9320]: %s - already released\n",
 				__func__);
-	} else {
-		if (!(status & (PHX_STATUS_REG << data->phen)))
+		}
+	} else { /* User released button */
+		if (!(status & (PHX_STATUS_REG << data->phen))) {
+			if (data->is_unknown_mode == UNKNOWN_ON && data->motion) {
+				pr_info("[sx9320]: %s - unknown mode off\n",
+					__func__);
+				data->is_unknown_mode = UNKNOWN_OFF;
+			}
 			sx9320_send_event(data, IDLE);
-		else
+		} else {
 			pr_info("[SX9320]: %s - still touched\n",
 				__func__);
+		}
 	}
 }
 
@@ -1325,14 +1433,22 @@ static void sx9320_debug_work_func(struct work_struct *work)
 			sx9320_get_data(data);
 			if (data->max_normal_diff < data->diff)
 				data->max_normal_diff = data->diff;
-		} else {
+/*		} else {
 			if (data->debug_count >= GRIP_LOG_TIME) {
 				sx9320_get_data(data);
 				data->debug_count = 0;
 			} else {
 				data->debug_count++;
-			}
+			}*/
 		}
+	}
+	if (data->debug_count >= GRIP_LOG_TIME) {
+		sx9320_get_data(data);
+		data->debug_count = 0;
+	} else {
+		if (data->is_unknown_mode == UNKNOWN_ON && data->motion)
+			sx9320_get_data(data);
+		data->debug_count++;
 	}
 
 	schedule_delayed_work_on(1, &data->debug_work, msecs_to_jiffies(2000));
@@ -1366,6 +1482,7 @@ static int sx9320_init_input(struct sx9320_p *data)
 	data->input->id.bustype = BUS_I2C;
 
 	input_set_capability(data->input, EV_REL, REL_MISC);
+	input_set_capability(data->input, EV_REL, REL_X);
 	input_set_capability(data->input, EV_REL, REL_MAX);
 	input_set_drvdata(data->input, data);
 
@@ -1438,6 +1555,9 @@ static void sx9320_initialize_variable(struct sx9320_p *data)
 	data->normal_th_buf = data->normal_th;
 	data->ch1_state = IDLE;
 	data->init_done = OFF;
+	data->is_unknown_mode = UNKNOWN_ON;
+	data->motion = 0;
+	data->first_working = false;
 
 	atomic_set(&data->enable, OFF);
 
@@ -1557,6 +1677,7 @@ static int sx9320_ccic_handle_notification(struct notifier_block *nb,
 			pr_info("[SX9320]: %s - drp = %d attat = %d\n",
 				__func__, usb_status.drp,
 				usb_status.attach);
+			sx9320_enter_unknown_mode(pdata);
 			sx9320_set_offset_calibration(pdata);
 			break;
 		default:
