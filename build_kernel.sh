@@ -21,6 +21,25 @@ function clean {
 		make -j$(nproc) mrproper
 }
 
+function patch {
+		printf "Patching Cached Defconfig\n"
+		sed -i 's/CONFIG_SECURITY_SELINUX_NEVER_ENFORCE=y/# CONFIG_SECURITY_SELINUX_NEVER_ENFORCE is not set/g' "$CUR_DIR"/.config
+		sed -i 's/CONFIG_HALL_NEW_NODE=y/# CONFIG_HALL_NEW_NODE is not set/g' "$CUR_DIR"/.config
+		sed -i 's/CONFIG_NETFILTER_XT_MATCH_OWNER=y/# CONFIG_NETFILTER_XT_MATCH_OWNER is not set/g' "$CUR_DIR"/.config
+		sed -i 's/CONFIG_NETFILTER_XT_MATCH_L2TP=y/# CONFIG_NETFILTER_XT_MATCH_L2TP is not set/g' "$CUR_DIR"/.config
+		sed -i 's/CONFIG_L2TP=y/# CONFIG_L2TP is not set/g' "$CUR_DIR"/.config
+		sed -i 's/# CONFIG_NET_SCH_NETEM is not set/CONFIG_NET_SCH_NETEM=y/g' "$CUR_DIR"/.config
+		sed -i 's/# CONFIG_NET_CLS_CGROUP is not set/CONFIG_NET_CLS_CGROUP=y/g' "$CUR_DIR"/.config
+		sed -i 's/CONFIG_NET_CLS_BPF=y/# CONFIG_NET_CLS_BPF is not set/g' "$CUR_DIR"/.config
+		sed -i 's/CONFIG_VSOCKETS=y/# CONFIG_VSOCKETS is not set/g' "$CUR_DIR"/.config
+		sed -i 's/# CONFIG_CGROUP_NET_CLASSID is not set/CONFIG_CGROUP_NET_CLASSID=y/g' "$CUR_DIR"/.config
+		echo "" >> "$CUR_DIR"/.config
+		echo "CONFIG_TCP_CONG_LIA=y" >> "$CUR_DIR"/.config
+		echo "CONFIG_TCP_CONG_OLIA=y" >> "$CUR_DIR"/.config
+		echo "CONFIG_NETFILTER_XT_MATCH_QTAGUID=y" >> "$CUR_DIR"/.config
+		echo "CONFIG_NETFILTER_XT_MATCH_ONESHOT=y" >> "$CUR_DIR"/.config
+}
+
 all="false"
 clean="false"
 
@@ -61,8 +80,7 @@ if [ -d $ZIP_ALT_DIR ]
 then
     printf "Building G960 Alternative\n"
 	make exynos9810-starlte_defconfig
-	sed -i 's/CONFIG_SECURITY_SELINUX_NEVER_ENFORCE=y/# CONFIG_SECURITY_SELINUX_NEVER_ENFORCE is not set/g' "$CUR_DIR"/.config
-	sed -i 's/CONFIG_HALL_NEW_NODE=y/# CONFIG_HALL_NEW_NODE is not set/g' "$CUR_DIR"/.config
+	patch
 	make -j$(nproc --all)
 	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/starlte/zImage
 	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/starlte/dtb.img
@@ -79,8 +97,7 @@ if [ -d $ZIP_ALT_DIR ]
 then
     printf "Building N960 Alternative\n"
 	make exynos9810-crownlte_defconfig
-	sed -i 's/CONFIG_SECURITY_SELINUX_NEVER_ENFORCE=y/# CONFIG_SECURITY_SELINUX_NEVER_ENFORCE is not set/g' "$CUR_DIR"/.config
-	sed -i 's/CONFIG_HALL_NEW_NODE=y/# CONFIG_HALL_NEW_NODE is not set/g' "$CUR_DIR"/.config
+	patch
 	make -j$(nproc --all)
 	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/crownlte/zImage
 	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/crownlte/dtb.img
@@ -98,8 +115,7 @@ if [ -d $ZIP_ALT_DIR ]
 then
 printf "Building G965 Alternative\n"
 make exynos9810-star2lte_defconfig
-sed -i 's/CONFIG_SECURITY_SELINUX_NEVER_ENFORCE=y/# CONFIG_SECURITY_SELINUX_NEVER_ENFORCE is not set/g' "$CUR_DIR"/.config
-sed -i 's/CONFIG_HALL_NEW_NODE=y/# CONFIG_HALL_NEW_NODE is not set/g' "$CUR_DIR"/.config
+patch
 make -j$(nproc --all)
 cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/star2lte/zImage
 cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_ALT_DIR/Kernel/star2lte/dtb.img
