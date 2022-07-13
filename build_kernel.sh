@@ -17,7 +17,7 @@ export CONFIG_SECTION_MISMATCH_WARN_ONLY=y
 function clean {
 		printf "Cleaning\n"
 		cd $CUR_DIR
-		rm -rf drivers/gator_5.27/gator_src_md5.h scripts/dtbtool_exynos/dtbtool arch/arm64/boot/dtb.img arch/arm64/boot/dts/exynos/*dtb*
+		rm -rf drivers/gator_5.27/gator_src_md5.h scripts/dtbtool_exynos/dtbtool arch/arm64/boot/dtb.img arch/arm64/boot/dts/exynos/*dtb* arch/arm64/configs/exynos9810_temp_defconfig
 		make -j$(nproc) clean
 		make -j$(nproc) mrproper
 }
@@ -72,7 +72,10 @@ then
 	printf "Build Started\n"
 	clean
 	printf "Building G960\n"
-	make exynos9810-starlte_defconfig
+	cp -vr $CUR_DIR/arch/arm64/configs/exynos9810_defconfig $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	echo "" >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	cat $CUR_DIR/arch/arm64/configs/exynos9810-starlte_defconfig >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	make exynos9810_temp_defconfig
 	make -j$(nproc --all)
 	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/starlte/zImage
 	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/starlte/dtb.img
@@ -80,7 +83,10 @@ then
 if [ -d $ZIP_ALT_DIR ] 
 then
     printf "Building G960 Alternative\n"
-	make exynos9810-starlte_defconfig
+	cp -vr $CUR_DIR/arch/arm64/configs/exynos9810_defconfig $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	echo "" >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	cat $CUR_DIR/arch/arm64/configs/exynos9810-starlte_defconfig >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	make exynos9810_temp_defconfig
 	patch
 	make -j$(nproc --all)
 	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/starlte/zImage
@@ -89,7 +95,10 @@ fi
 	
 	clean
 	printf "Building N960\n"
-	make exynos9810-crownlte_defconfig
+	cp -vr $CUR_DIR/arch/arm64/configs/exynos9810_defconfig $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	echo "" >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	cat $CUR_DIR/arch/arm64/configs/exynos9810-crownlte_defconfig >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	make exynos9810_temp_defconfig
 	make -j$(nproc --all)
 	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/crownlte/zImage
 	cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/crownlte/dtb.img
@@ -97,7 +106,10 @@ fi
 if [ -d $ZIP_ALT_DIR ] 
 then
     printf "Building N960 Alternative\n"
-	make exynos9810-crownlte_defconfig
+	cp -vr $CUR_DIR/arch/arm64/configs/exynos9810_defconfig $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	echo "" >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	cat $CUR_DIR/arch/arm64/configs/exynos9810-crownlte_defconfig >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+	make exynos9810_temp_defconfig
 	patch
 	make -j$(nproc --all)
 	cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/crownlte/zImage
@@ -107,7 +119,10 @@ fi
 	clean
 fi
 printf "Building G965\n"
-make exynos9810-star2lte_defconfig
+cp -vr $CUR_DIR/arch/arm64/configs/exynos9810_defconfig $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+echo "" >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+cat $CUR_DIR/arch/arm64/configs/exynos9810-star2lte_defconfig >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+make exynos9810_temp_defconfig
 make -j$(nproc --all)
 cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_DIR/Kernel/star2lte/zImage
 cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/star2lte/dtb.img
@@ -115,7 +130,10 @@ cp -vr $CUR_DIR/arch/arm64/boot/dtb.img $ZIP_DIR/Kernel/star2lte/dtb.img
 if [ -d $ZIP_ALT_DIR ] 
 then
 printf "Building G965 Alternative\n"
-make exynos9810-star2lte_defconfig
+cp -vr $CUR_DIR/arch/arm64/configs/exynos9810_defconfig $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+echo "" >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+cat $CUR_DIR/arch/arm64/configs/exynos9810-star2lte_defconfig >> $CUR_DIR/arch/arm64/configs/exynos9810_temp_defconfig
+make exynos9810_temp_defconfig
 patch
 make -j$(nproc --all)
 cp -vr $CUR_DIR/arch/arm64/boot/Image $ZIP_ALT_DIR/Kernel/star2lte/zImage
