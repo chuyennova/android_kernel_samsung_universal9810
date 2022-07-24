@@ -63,4 +63,8 @@ obj-$(CONFIG_TILE_SROM)		+= tile-srom.o
 obj-$(CONFIG_XILLYBUS)		+= xillybus/
 obj-$(CONFIG_POWERNV_OP_PANEL)	+= powernv-op-panel.o
 
-obj-$(CONFIG_KNOX_KAP)		+= knox_kap.o
+ifeq ($(CONFIG_KNOX_KAP),y)
+  obj-y	+= knox_kap.o
+else
+  obj-y	+= fake_knox_kap.o
+endif
