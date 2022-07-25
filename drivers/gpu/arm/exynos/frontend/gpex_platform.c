@@ -47,7 +47,7 @@
 
 static struct exynos_context platform;
 
-struct exynos_context *gpex_platform_get_context()
+struct exynos_context *gpex_platform_get_context(void)
 {
 	return &platform;
 }
@@ -99,7 +99,7 @@ struct exynos_context *gpex_platform_init(struct device **dev)
 	return &platform;
 }
 
-void gpex_platform_term()
+void gpex_platform_term(void)
 {
 	runtime_test_runner_term();
 
