@@ -1133,7 +1133,7 @@ static __init int cpufreq_read_mif_min(char *mif_min)
 }
 __setup("mif_min=", cpufreq_read_mif_min);
 
-unsigned long arg_cpu_max_c1 = 2002000;
+unsigned long arg_cpu_max_c1 = 2106000;
 
 static int __init cpufreq_read_cpu_max_c1(char *cpu_max_c1)
 {
@@ -1150,7 +1150,7 @@ static int __init cpufreq_read_cpu_max_c1(char *cpu_max_c1)
 }
 __setup("cpu_max_c1=", cpufreq_read_cpu_max_c1);
 
-unsigned long arg_cpu_max_c2 = 2886000;
+unsigned long arg_cpu_max_c2 = 3016000;
 
 static __init int cpufreq_read_cpu_max_c2(char *cpu_max_c2)
 {
