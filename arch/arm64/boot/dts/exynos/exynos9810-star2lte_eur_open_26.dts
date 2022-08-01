@@ -8661,7 +8661,7 @@
 				BUCK2 {
 					regulator-name = "vdd_cpucl1";
 					regulator-min-microvolt = <0x6ddd0>;
-					regulator-max-microvolt = <0x13d620>;
+					regulator-max-microvolt = <0x16e360>;
 					regulator-always-on;
 					regulator-ramp-delay = <0x1770>;
 					regulator-initial-mode = <0x1>;
@@ -8672,7 +8672,7 @@
 				BUCK3 {
 					regulator-name = "vdd_cpucl0";
 					regulator-min-microvolt = <0x6ddd0>;
-					regulator-max-microvolt = <0x13d620>;
+					regulator-max-microvolt = <0x16e360>;
 					regulator-always-on;
 					regulator-ramp-delay = <0x1770>;
 					regulator-initial-mode = <0x1>;
@@ -8705,7 +8705,7 @@
 				BUCK6 {
 					regulator-name = "vdd_g3d";
 					regulator-min-microvolt = <0x6ddd0>;
-					regulator-max-microvolt = <0xe7ef0>;
+					regulator-max-microvolt = <0x100590>;
 					regulator-always-on;
 					regulator-ramp-delay = <0x1770>;
 					regulator-initial-mode = <0x2>;
