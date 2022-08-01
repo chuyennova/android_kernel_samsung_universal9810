@@ -353,84 +353,39 @@ static const struct attribute_group percent_margin_group = {
 	.attrs = percent_margin_attrs,
 };
 
-void print_fvmap(void)
+ssize_t print_fvmap(char *buf)
 {
-	volatile struct fvmap_header *fvmap_header, *header;
-	struct rate_volt_header *old, *new;
-	struct clocks *clks;
-	struct pll_header *plls;
+	volatile struct fvmap_header *fvmap_header;
+	struct rate_volt_header *cur;
 	struct vclk *vclk;
-	struct cmucal_clk *clk_node;
-	unsigned int paddr_offset, fvaddr_offset;
-	int size, margin;
 	int i, j;
+	ssize_t len = 0;
 
 	fvmap_header = _map_base;
-	header = _sram_base;
 
-	size = cmucal_get_list_size(ACPM_VCLK_TYPE);
-
-	for (i = 0; i < size; i++) {
-		/* load fvmap info */
-		fvmap_header[i].dvfs_type = header[i].dvfs_type;
-		fvmap_header[i].num_of_lv = header[i].num_of_lv;
-		fvmap_header[i].num_of_members = header[i].num_of_members;
-		fvmap_header[i].num_of_pll = header[i].num_of_pll;
-		fvmap_header[i].num_of_mux = header[i].num_of_mux;
-		fvmap_header[i].num_of_div = header[i].num_of_div;
-		fvmap_header[i].gearratio = header[i].gearratio;
-		fvmap_header[i].init_lv = header[i].init_lv;
-		fvmap_header[i].num_of_gate = header[i].num_of_gate;
-		fvmap_header[i].reserved[0] = header[i].reserved[0];
-		fvmap_header[i].reserved[1] = header[i].reserved[1];
-		fvmap_header[i].block_addr[0] = header[i].block_addr[0];
-		fvmap_header[i].block_addr[1] = header[i].block_addr[1];
-		fvmap_header[i].block_addr[2] = header[i].block_addr[2];
-		fvmap_header[i].o_members = header[i].o_members;
-		fvmap_header[i].o_ratevolt = header[i].o_ratevolt;
-		fvmap_header[i].o_tables = header[i].o_tables;
-
+	for (i = 0; i < 5; i++) { /* Limit Print */
 		vclk = cmucal_get_node(ACPM_VCLK_TYPE | i);
 		if (vclk == NULL)
 			continue;
-		pr_info("dvfs_type : %s - id : %x\n",
-			vclk->name, fvmap_header[i].dvfs_type);
-		pr_info("  num_of_lv      : %d\n", fvmap_header[i].num_of_lv);
-		pr_info("  num_of_members : %d\n", fvmap_header[i].num_of_members);
-
-		old = _sram_base + fvmap_header[i].o_ratevolt;
-		new = _map_base + fvmap_header[i].o_ratevolt;
 		
-		check_percent_margin(old, fvmap_header[i].num_of_lv);
+		/* Delete From Print */
+		if (strcmp(vclk->name, "dvfs_int") == 0)
+			continue;
+		
+		len += sprintf(buf + len, "dvfs_type : %s - id : %x\n",
+			vclk->name, fvmap_header[i].dvfs_type);
+		len += sprintf(buf + len, "  num_of_lv      : %d\n", fvmap_header[i].num_of_lv);
+		len += sprintf(buf + len, "  num_of_members : %d\n", fvmap_header[i].num_of_members);
 
-		margin = init_margin_table[vclk->margin_id];
-		if (margin)
-			cal_dfs_set_volt_margin(i | ACPM_VCLK_TYPE, margin);
+		cur = _map_base + fvmap_header[i].o_ratevolt;
 
 		for (j = 0; j < fvmap_header[i].num_of_lv; j++) {
-			new->table[j].rate = old->table[j].rate;
-			new->table[j].volt = old->table[j].volt;
-			pr_info("  lv : [%7d], volt = %d uV\n",
-				new->table[j].rate, new->table[j].volt);
-		}
-
-		for (j = 0; j < fvmap_header[i].num_of_pll; j++) {
-			clks = _sram_base + fvmap_header[i].o_members;
-			plls = _sram_base + clks->addr[j];
-			clk_node = cmucal_get_node(vclk->list[j]);
-			if (clk_node == NULL)
-				continue;
-			paddr_offset = clk_node->paddr & 0xFFFF;
-			fvaddr_offset = plls->addr & 0xFFFF;
-			if (paddr_offset == fvaddr_offset)
-				continue;
-
-			clk_node->paddr += fvaddr_offset - paddr_offset;
-			clk_node->pll_con0 += fvaddr_offset - paddr_offset;
-			if (clk_node->pll_con1)
-				clk_node->pll_con1 += fvaddr_offset - paddr_offset;
+			len += sprintf(buf + len, "  lv : [%7d], volt = %d uV\n",
+				cur->table[j].rate, cur->table[j].volt);
 		}
 	}
+	
+	return len;
 }
 
 void update_fvmap(int id, int rate, int volt)

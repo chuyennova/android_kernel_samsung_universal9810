@@ -31,6 +31,6 @@ static inline bool is_throttle_limit(unsigned int clipped_freq, int cpu)
 #endif
 
 extern void update_fvmap(int id, int rate, int volt);
-extern void print_fvmap(void);
+extern ssize_t print_fvmap(char *buf);
 
 #endif /* __THROTTLE_LIMIT_H__ */
