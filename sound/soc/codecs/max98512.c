@@ -455,6 +455,7 @@ int max98512_wrapper_update(struct max98512_priv *max98512,
 				moro_mode = 1;
 				break;
 			default:
+				break;
 		}
 	}
 #endif
