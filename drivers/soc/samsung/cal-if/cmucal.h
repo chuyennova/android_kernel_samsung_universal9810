@@ -332,11 +332,11 @@ struct pll_spec {
  * @pdiv, @mdiv, @sdiv, @kdiv: for rate
  */
 struct cmucal_pll_table {
-	unsigned int		rate;
+	unsigned long		rate;
 	unsigned short		pdiv;
 	unsigned short		mdiv;
 	unsigned short		sdiv;
-	signed short		kdiv;
+	signed int		kdiv;
 };
 
 /*

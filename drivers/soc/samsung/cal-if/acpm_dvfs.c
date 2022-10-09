@@ -97,7 +97,7 @@ int exynos_acpm_set_volt_margin(unsigned int id, int volt)
 	if (ret)
 		pr_err("%s:[%d] latency = %llu ret = %d",
 			__func__, id, latency, ret);
-
+			
 	vclk = cmucal_get_node(id);
 	pr_auto(ASL5, "%s: [%s] +margin %d uV\n", __func__, margin_list[vclk->margin_id], volt);
 

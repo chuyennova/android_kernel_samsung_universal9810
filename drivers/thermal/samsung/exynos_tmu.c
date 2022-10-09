@@ -1405,7 +1405,7 @@ static int exynos_tmu_parse_ect(struct exynos_tmu_data *data)
 
 		__tz->ntrips = __tz->num_tbps = function->num_of_range;
 		pr_info("Trip count parsed from ECT : %d, zone : %s", function->num_of_range, tz->type);
-		
+
 		/* increase little cpu thermal values */
 		if (ect_strcmp(function->function_name, "LITTLE") == 0) {
 			int shift = 1;
