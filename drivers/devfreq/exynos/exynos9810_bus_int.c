@@ -129,13 +129,14 @@ static int exynos9810_devfreq_int_cmu_dump(struct exynos_devfreq_data *data)
 
 static int exynos9810_devfreq_int_reboot(struct exynos_devfreq_data *data)
 {
+/*
 	data->max_freq = data->reboot_freq;
 	data->devfreq->max_freq = data->max_freq;
 
 	mutex_lock(&data->devfreq->lock);
 	update_devfreq(data->devfreq);
 	mutex_unlock(&data->devfreq->lock);
-
+*/
 	return 0;
 }
 
@@ -181,9 +182,9 @@ static int exynos9810_devfreq_int_resume(struct exynos_devfreq_data *data)
 static int exynos9810_devfreq_int_init_freq_table(struct exynos_devfreq_data *data)
 {
 	u32 max_freq, min_freq;
-	unsigned long tmp_max, tmp_min;
+/*	unsigned long tmp_max, tmp_min;
 	struct dev_pm_opp *target_opp;
-	u32 flags = 0;
+	u32 flags = 0;*/
 	int i, ret;
 
 	max_freq = (u32)cal_dfs_get_max_freq(data->dfs_id);
@@ -195,6 +196,7 @@ static int exynos9810_devfreq_int_init_freq_table(struct exynos_devfreq_data *da
 	dev_info(data->dev, "max_freq: %uKhz, get_max_freq: %uKhz\n",
 			data->max_freq, max_freq);
 
+/*
 	if (max_freq < data->max_freq) {
 		rcu_read_lock();
 		flags |= DEVFREQ_FLAG_LEAST_UPPER_BOUND;
@@ -209,6 +211,7 @@ static int exynos9810_devfreq_int_init_freq_table(struct exynos_devfreq_data *da
 		data->max_freq = (u32)dev_pm_opp_get_freq(target_opp);
 		rcu_read_unlock();
 	}
+*/
 
 	/* min ferquency must be equal or under max frequency */
 	if (data->min_freq > data->max_freq)
@@ -223,6 +226,7 @@ static int exynos9810_devfreq_int_init_freq_table(struct exynos_devfreq_data *da
 	dev_info(data->dev, "min_freq: %uKhz, get_min_freq: %uKhz\n",
 			data->min_freq, min_freq);
 
+/*
 	if (min_freq > data->min_freq) {
 		rcu_read_lock();
 		flags &= ~DEVFREQ_FLAG_LEAST_UPPER_BOUND;
@@ -237,6 +241,7 @@ static int exynos9810_devfreq_int_init_freq_table(struct exynos_devfreq_data *da
 		data->min_freq = (u32)dev_pm_opp_get_freq(target_opp);
 		rcu_read_unlock();
 	}
+*/
 
 	dev_info(data->dev, "min_freq: %uKhz, max_freq: %uKhz\n",
 			data->min_freq, data->max_freq);
@@ -247,7 +252,7 @@ static int exynos9810_devfreq_int_init_freq_table(struct exynos_devfreq_data *da
 			dev_pm_opp_disable(data->dev, (unsigned long)data->opp_list[i].freq);
 	}
 
-	data->devfreq_profile.initial_freq = cal_dfs_get_boot_freq(data->dfs_id);
+	data->devfreq_profile.initial_freq = data->max_freq;
 	data->devfreq_profile.suspend_freq = cal_dfs_get_resume_freq(data->dfs_id);
 
 	ret = exynos9810_int_constraint_parse(data, min_freq, max_freq);
