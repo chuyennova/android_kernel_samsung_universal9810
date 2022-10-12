@@ -45,7 +45,7 @@
 #include <linux/profile.h>
 #include <linux/notifier.h>
 #include <linux/ratelimit.h>
-	#include <linux/circ_buf.h>
+#include <linux/circ_buf.h>
 #include <linux/proc_fs.h>
 #include <linux/slab.h>
 #include <linux/poll.h>
@@ -73,7 +73,6 @@ static int lowmem_minfree[6] = {
 };
 
 static int lowmem_minfree_size = 4;
-
 static u32 lowmem_lmkcount;
 
 static unsigned long lowmem_deathpending_timeout;
@@ -162,6 +161,7 @@ static DEFINE_SPINLOCK(lmk_event_lock);
 static struct circ_buf event_buffer;
 #define MAX_BUFFERED_EVENTS 8
 #define MAX_TASKNAME 128
+
 struct lmk_event {
 	char taskname[MAX_TASKNAME];
 	pid_t pid;
@@ -175,6 +175,7 @@ struct lmk_event {
 	unsigned long long start_time;
 	struct list_head list;
 };
+
 void handle_lmk_event(struct task_struct *selected, int selected_tasksize,
 		      short min_score_adj)
 {
@@ -182,17 +183,23 @@ void handle_lmk_event(struct task_struct *selected, int selected_tasksize,
 	int tail;
 	struct lmk_event *events;
 	struct lmk_event *event;
+
 	spin_lock(&lmk_event_lock);
+
 	head = event_buffer.head;
 	tail = READ_ONCE(event_buffer.tail);
+
 	/* Do not continue to log if no space remains in the buffer. */
 	if (CIRC_SPACE(head, tail, MAX_BUFFERED_EVENTS) < 1) {
 		spin_unlock(&lmk_event_lock);
 		return;
 	}
+
 	events = (struct lmk_event *) event_buffer.buf;
 	event = &events[head];
+
 	strncpy(event->taskname, selected->comm, MAX_TASKNAME);
+
 	event->pid = selected->pid;
 	event->uid = from_kuid_munged(current_user_ns(), task_uid(selected));
 	if (selected->group_leader)
@@ -205,36 +212,49 @@ void handle_lmk_event(struct task_struct *selected, int selected_tasksize,
 	event->start_time = nsec_to_clock_t(selected->real_start_time);
 	event->rss_in_pages = selected_tasksize;
 	event->min_score_adj = min_score_adj;
+
 	event_buffer.head = (head + 1) & (MAX_BUFFERED_EVENTS - 1);
+
 	spin_unlock(&lmk_event_lock);
+
 	wake_up_interruptible(&event_wait);
 }
+
 static int lmk_event_show(struct seq_file *s, void *unused)
 {
 	struct lmk_event *events = (struct lmk_event *) event_buffer.buf;
 	int head;
 	int tail;
 	struct lmk_event *event;
+
 	spin_lock(&lmk_event_lock);
+
 	head = event_buffer.head;
 	tail = event_buffer.tail;
+
 	if (head == tail) {
 		spin_unlock(&lmk_event_lock);
 		return -EAGAIN;
 	}
+
 	event = &events[tail];
+
 	seq_printf(s, "%lu %lu %lu %lu %lu %lu %hd %hd %llu\n%s\n",
 		(unsigned long) event->pid, (unsigned long) event->uid,
 		(unsigned long) event->group_leader_pid, event->min_flt,
 		event->maj_flt, event->rss_in_pages, event->oom_score_adj,
 		event->min_score_adj, event->start_time, event->taskname);
+
 	event_buffer.tail = (tail + 1) & (MAX_BUFFERED_EVENTS - 1);
+
 	spin_unlock(&lmk_event_lock);
 	return 0;
 }
+
 static unsigned int lmk_event_poll(struct file *file, poll_table *wait)
 {
 	int ret = 0;
+
 	poll_wait(file, &event_wait, wait);
 	spin_lock(&lmk_event_lock);
 	if (event_buffer.head != event_buffer.tail)
@@ -242,18 +262,22 @@ static unsigned int lmk_event_poll(struct file *file, poll_table *wait)
 	spin_unlock(&lmk_event_lock);
 	return ret;
 }
+
 static int lmk_event_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, lmk_event_show, inode->i_private);
 }
+
 static const struct file_operations event_file_ops = {
 	.open = lmk_event_open,
 	.poll = lmk_event_poll,
 	.read = seq_read
 };
+
 static void lmk_event_init(void)
 {
 	struct proc_dir_entry *entry;
+
 	event_buffer.head = 0;
 	event_buffer.tail = 0;
 	event_buffer.buf = kmalloc(
@@ -273,11 +297,6 @@ static unsigned long lowmem_count(struct shrinker *s,
 		global_node_page_state(NR_INACTIVE_ANON) +
 		global_node_page_state(NR_INACTIVE_FILE);
 }
-
-#if defined(CONFIG_ZSWAP)
-extern u64 zswap_pool_pages;
-extern atomic_t zswap_stored_pages;
-#endif
 
 static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 {
@@ -300,10 +319,14 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 	unsigned long nr_cma_free;
 	unsigned long nr_rbin_free, nr_rbin_pool, nr_rbin_alloc, nr_rbin_file;
 	int migratetype;
-#if defined(CONFIG_ZSWAP)
-	int zswap_stored_pages_temp;
+#if defined(CONFIG_SWAP)
+	unsigned long swap_orig_nrpages;
+	unsigned long swap_comp_nrpages;
 	int swap_rss;
 	int selected_swap_rss;
+
+	swap_orig_nrpages = get_swap_orig_data_nrpages();
+	swap_comp_nrpages = get_swap_comp_pool_nrpages();
 #endif
 
 	nr_cma_free = global_page_state(NR_FREE_CMA_PAGES);
@@ -384,18 +407,13 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 			continue;
 		}
 		tasksize = get_mm_rss(p->mm);
-#if defined(CONFIG_ZSWAP)
-		zswap_stored_pages_temp = atomic_read(&zswap_stored_pages);
-		if (zswap_stored_pages_temp) {
-			lowmem_print(3, "shown tasksize : %d\n", tasksize);
-			swap_rss = (int)zswap_pool_pages
-					* get_mm_counter(p->mm, MM_SWAPENTS)
-					/ zswap_stored_pages_temp;
-			tasksize += swap_rss;
-			lowmem_print(3, "real tasksize : %d\n", tasksize);
-		} else {
-			swap_rss = 0;
-		}
+#if defined(CONFIG_SWAP)
+		swap_rss = get_mm_counter(p->mm, MM_SWAPENTS) *
+				swap_comp_nrpages / swap_orig_nrpages;
+		lowmem_print(3, "%s tasksize rss: %d swap_rss: %d swap: %lu/%lu\n",
+			     __func__, tasksize, swap_rss, swap_comp_nrpages,
+			     swap_orig_nrpages);
+		tasksize += swap_rss;
 #endif
 		task_unlock(p);
 		if (tasksize <= 0)
@@ -409,7 +427,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		}
 		selected = p;
 		selected_tasksize = tasksize;
-#if defined(CONFIG_ZSWAP)
+#if defined(CONFIG_SWAP)
 		selected_swap_rss = swap_rss;
 #endif
 		selected_oom_score_adj = oom_score_adj;
@@ -420,7 +438,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		long cache_size = other_file * (long)(PAGE_SIZE / 1024);
 		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
 		long free = other_free * (long)(PAGE_SIZE / 1024);
-#if defined(CONFIG_ZSWAP)
+#if defined(CONFIG_SWAP)
 		int orig_tasksize = selected_tasksize - selected_swap_rss;
 #endif
 
@@ -431,7 +449,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		task_unlock(selected);
 		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
 		lowmem_print(1, "Killing '%s' (%d) (tgid %d), adj %hd,\n"
-#if defined(CONFIG_ZSWAP)
+#if defined(CONFIG_SWAP)
 				 "   to free %ldkB (%ldKB %ldKB) on behalf of '%s' (%d) because\n"
 #else
 				 "   to free %ldkB on behalf of '%s' (%d) because\n"
@@ -442,7 +460,7 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 				 "   GFP mask is %#x(%pGg)\n",
 			     selected->comm, selected->pid, selected->tgid,
 			     selected_oom_score_adj,
-#if defined(CONFIG_ZSWAP)
+#if defined(CONFIG_SWAP)
 			     selected_tasksize * (long)(PAGE_SIZE / 1024),
 			     orig_tasksize * (long)(PAGE_SIZE / 1024),
 			     selected_swap_rss * (long)(PAGE_SIZE / 1024),
@@ -474,7 +492,6 @@ static unsigned long lowmem_scan(struct shrinker *s, struct shrink_control *sc)
 		handle_lmk_event(selected, selected_tasksize, min_score_adj);
 		put_task_struct(selected);
 	}
-
 	if (!rem)
 		rem = SHRINK_STOP;
 
@@ -587,8 +604,7 @@ module_param_cb(adj, &lowmem_adj_array_ops,
 		0644);
 __MODULE_PARM_TYPE(adj, "array of short");
 #else
-module_param_array_named(direct_adj, direct_lowmem_adj, short, &lowmem_direct_adj_size,
-			 0644);
+module_param_array_named(adj, lowmem_adj, short, &lowmem_adj_size, 0644);
 #endif
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 0644);

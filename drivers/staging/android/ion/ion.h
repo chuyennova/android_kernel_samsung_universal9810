@@ -117,6 +117,10 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 			     size_t align, unsigned int heap_id_mask,
 			     unsigned int flags);
 
+struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
+			       size_t align, unsigned int heap_id_mask,
+			       unsigned int flags, bool grab_handle);
+
 /**
  * ion_free - free a handle
  * @client:	the client
@@ -223,6 +227,13 @@ dma_addr_t ion_iovmm_map(struct dma_buf_attachment *attachment,
 			 off_t offset, size_t size,
 			 enum dma_data_direction direction, int prop);
 void ion_iovmm_unmap(struct dma_buf_attachment *attachment, dma_addr_t iova);
+#define IOMMU_EXYNOS_SECURE    (1 << 0)
+dma_addr_t ion_iovmm_map_attr(struct dma_buf_attachment *attachment,
+			      off_t offset, size_t size,
+			      enum dma_data_direction direction, int prop,
+			      int map_attr);
+void ion_iovmm_unmap_attr(struct dma_buf_attachment *attachment,
+			  dma_addr_t iova, int map_attr);
 bool ion_is_heap_available(struct ion_heap *heap, unsigned long flags, void *data);
 
 #endif /* _LINUX_ION_H */
