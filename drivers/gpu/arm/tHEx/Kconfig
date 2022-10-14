@@ -97,6 +97,10 @@ config MALI_BIFROST_R38P0
 config MALI_BIFROST_R39P0
 	depends on MALI_THEX
 	bool "Bifrost r39p0 driver"
+	
+config MALI_BIFROST_R40P0
+	depends on MALI_THEX
+	bool "Bifrost r40p0 driver"
 
 endchoice
 
@@ -147,4 +151,7 @@ source "drivers/gpu/arm/bv_r38p0/Kconfig"
 endif
 if MALI_BIFROST_R39P0
 source "drivers/gpu/arm/bv_r39p0/Kconfig"
+endif
+if MALI_BIFROST_R40P0
+source "drivers/gpu/arm/bv_r40p0/Kconfig"
 endif
