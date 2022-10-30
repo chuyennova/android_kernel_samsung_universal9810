@@ -29,3 +29,14 @@ config SEC_HAPTIC
 	  To enable this driver, SEC_SYSFS should be enabled and
 	  motor driver calls this driver.
 
+config PLATFORM_ONEUI
+	tristate "oneui platform"
+	default y
+	help
+	  If you say yes here kernel will compiled for ONEUI Platform.
+	  
+config PLATFORM_AOSP
+	tristate "aosp platform"
+	default n
+	help
+	  If you say yes here kernel will compiled for AOSP Platform.
