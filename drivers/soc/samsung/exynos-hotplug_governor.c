@@ -178,6 +178,11 @@ bool exynos_cpu_hotplug_gov_enabled(void)
 	return exynos_hpgov.enabled;
 }
 
+unsigned int exynos_cpu_hotplug_gov_base_freq(void)
+{
+	return exynos_hpgov.maxfreq_table[QUAD];
+}
+
 /**********************************************************************************/
 /*			CPUFREQ for max frequency control			  */
 /**********************************************************************************/
