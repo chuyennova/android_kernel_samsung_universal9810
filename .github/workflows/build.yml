@@ -49,6 +49,7 @@ jobs:
           test -x /usr/bin/aarch64-linux-gnu-gcc
           test -x /usr/bin/aarch64-linux-gnu-as
           test -x /usr/bin/aarch64-linux-gnu-ld
+          test -x /usr/bin/aarch64-linux-gnu-objcopy
           test -x /usr/bin/aarch64-linux-gnu-elfedit
 
           {
@@ -256,6 +257,8 @@ jobs:
           mkdir -p "$AARCH64_WRAPPER_BIN"
 
           for tool in \
+            gcc \
+            cpp \
             as \
             ld \
             ar \
@@ -276,31 +279,38 @@ jobs:
               exit 1
             fi
 
-            ln -sf \
+            ln -sfn \
               "$source_tool" \
               "$AARCH64_WRAPPER_BIN/${tool}"
 
-            ln -sf \
+            ln -sfn \
               "$source_tool" \
               "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-${tool}"
           done
 
+          test -x "$AARCH64_WRAPPER_BIN/gcc"
           test -x "$AARCH64_WRAPPER_BIN/as"
           test -x "$AARCH64_WRAPPER_BIN/ld"
+          test -x "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-gcc"
           test -x "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-as"
           test -x "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-ld"
 
           echo
           echo "=== VERIFY AARCH64 WRAPPER ==="
 
+          "$AARCH64_WRAPPER_BIN/gcc" --version
           "$AARCH64_WRAPPER_BIN/as" --version
           "$AARCH64_WRAPPER_BIN/ld" --version
 
-          test "$(readlink -f "$AARCH64_WRAPPER_BIN/as")" = \
-            "/usr/bin/aarch64-linux-gnu-as"
+          "$AARCH64_WRAPPER_BIN/as" --version \
+            | grep -q "aarch64-linux-gnu"
 
-          test "$(readlink -f "$AARCH64_WRAPPER_BIN/ld")" = \
-            "/usr/bin/aarch64-linux-gnu-ld"
+          "$AARCH64_WRAPPER_BIN/ld" --version \
+            | grep -q "GNU ld"
+
+          echo "AS real path: $(readlink -f "$AARCH64_WRAPPER_BIN/as")"
+          echo "LD real path: $(readlink -f "$AARCH64_WRAPPER_BIN/ld")"
+          echo "GCC real path: $(readlink -f "$AARCH64_WRAPPER_BIN/gcc")"
 
           echo
           echo "=== PATCH BUILD SCRIPT ==="
@@ -369,12 +379,29 @@ jobs:
             "/^export CROSS_COMPILE_ARM32=/a export CLANG_TRIPLE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
             build_kernel.sh
 
+          if grep -q \
+            '^export PATH=.*aarch64-wrapper' \
+            build_kernel.sh
+          then
+            sed -i \
+              "s|^export PATH=.*aarch64-wrapper.*|export PATH=\"${AARCH64_WRAPPER_BIN}:\$PATH\"|" \
+              build_kernel.sh
+          else
+            sed -i \
+              "/^export CLANG_TRIPLE=/a export PATH=\"${AARCH64_WRAPPER_BIN}:\$PATH\"" \
+              build_kernel.sh
+          fi
+
           grep -qx \
             "export CROSS_COMPILE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
             build_kernel.sh
 
           grep -qx \
             "export CLANG_TRIPLE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
+            build_kernel.sh
+
+          grep -qx \
+            "export PATH=\"${AARCH64_WRAPPER_BIN}:\$PATH\"" \
             build_kernel.sh
 
           echo
@@ -419,7 +446,7 @@ jobs:
           echo "=== TOOLCHAIN SETTINGS AFTER PATCH ==="
 
           grep -nE \
-            '^(export CC|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|export KCFLAGS|ZIP_DIR|ZIP_ALT_DIR)' \
+            '^(export CC|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|export PATH|export KCFLAGS|ZIP_DIR|ZIP_ALT_DIR)' \
             build_kernel.sh
 
           echo
@@ -430,6 +457,7 @@ jobs:
           echo
           echo "AS -> $(readlink -f "$AARCH64_WRAPPER_BIN/as")"
           echo "LD -> $(readlink -f "$AARCH64_WRAPPER_BIN/ld")"
+          echo "GCC -> $(readlink -f "$AARCH64_WRAPPER_BIN/gcc")"
 
           echo
           echo "=== MAKE COMMANDS AFTER DEBUG PATCH ==="
