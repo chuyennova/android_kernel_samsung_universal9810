@@ -19,9 +19,10 @@ jobs:
 
       - name: 2. Install build tools and Clang 16
         run: |
-          set -e
+          set -Eeuo pipefail
 
           sudo apt-get update
+
           sudo apt-get install -y \
             bc \
             bison \
@@ -69,12 +70,13 @@ jobs:
 
       - name: 3. Download ARM32 arm-eabi toolchain
         run: |
-          set -e
+          set -Eeuo pipefail
 
           rm -rf toolchains/gcc32
           mkdir -p toolchains
 
-          git clone --depth=1 \
+          git clone \
+            --depth=1 \
             --branch android-8.1.0_r1 \
             https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8 \
             toolchains/gcc32
@@ -91,7 +93,7 @@ jobs:
 
       - name: 4. Download original v45.4 flash ZIP
         run: |
-          set -e
+          set -Eeuo pipefail
 
           wget -q --show-progress \
             https://github.com/xxmustafacooTR/android_kernel_samsung_universal9810/releases/download/v45.4/xxmustafacooTR-45.4-ENFORCE.zip \
@@ -109,12 +111,17 @@ jobs:
 
       - name: 5. Pin WireGuard and patch configs
         run: |
-          set -e
+          set -Eeuo pipefail
+
+          exec > >(tee patch-full.log) 2>&1
+
+          echo "=== PATCH STARTED: $(date -u) ==="
 
           mkdir -p Zip/Kernel/starlte
           mkdir -p Zip/Kernel/star2lte
           mkdir -p Zip/Kernel/crownlte
 
+          echo
           echo "=== DISABLE OLD AUTO WIREGUARD FETCH ==="
 
           test -f scripts/Kbuild.include
@@ -123,75 +130,134 @@ jobs:
             '/fetch-latest-wireguard\.sh/d' \
             scripts/Kbuild.include
 
-          if grep -q 'fetch-latest-wireguard\.sh' scripts/Kbuild.include; then
+          if grep -q \
+            'fetch-latest-wireguard\.sh' \
+            scripts/Kbuild.include
+          then
             echo "ERROR: WireGuard auto-fetch hook still exists"
             exit 1
           fi
 
+          echo
           echo "=== INSTALL PINNED WIREGUARD v1.0.20220627 ==="
 
-          rm -rf \
-            net/wireguard \
-            wireguard-linux-compat-1.0.20220627 \
-            wireguard-linux-compat-1.0.20220627.tar.xz
-
-          wget -q --show-progress \
-            https://git.zx2c4.com/wireguard-linux-compat/snapshot/wireguard-linux-compat-1.0.20220627.tar.xz \
-            -O wireguard-linux-compat-1.0.20220627.tar.xz
-
-          test -s wireguard-linux-compat-1.0.20220627.tar.xz
-          xz -t wireguard-linux-compat-1.0.20220627.tar.xz
-          tar -tJf wireguard-linux-compat-1.0.20220627.tar.xz >/dev/null
+          rm -rf net/wireguard
+          rm -rf wireguard-linux-compat
 
           mkdir -p net/wireguard
 
-          tar -xJf wireguard-linux-compat-1.0.20220627.tar.xz \
-            --strip-components=2 \
-            -C net/wireguard \
-            wireguard-linux-compat-1.0.20220627/src
+          if ! git clone \
+            --depth=1 \
+            --branch v1.0.20220627 \
+            https://git.zx2c4.com/wireguard-linux-compat \
+            wireguard-linux-compat
+          then
+            echo "Official WireGuard server clone failed."
+            echo "Trying GitHub mirror..."
 
-          sed -i \
-            's/tristate/bool/; s/default m/default y/' \
-            net/wireguard/Kconfig
+            rm -rf wireguard-linux-compat
 
-          touch net/wireguard/.check
+            git clone \
+              --depth=1 \
+              --branch v1.0.20220627 \
+              https://github.com/WireGuard/wireguard-linux-compat.git \
+              wireguard-linux-compat
+          fi
+
+          test -s wireguard-linux-compat/src/Kconfig
+          test -s wireguard-linux-compat/src/Makefile
+          test -s wireguard-linux-compat/src/main.c
+
+          cp -a \
+            wireguard-linux-compat/src/. \
+            net/wireguard/
 
           test -s net/wireguard/Kconfig
           test -s net/wireguard/Makefile
           test -s net/wireguard/main.c
 
-          echo "=== WIREGUARD READY ==="
-          grep -n 'config WIREGUARD' net/wireguard/Kconfig
+          echo
+          echo "=== WIREGUARD SOURCE READY ==="
 
-          echo "=== ENABLE IPV6 MASQUERADE ==="
+          grep -n \
+            'config WIREGUARD' \
+            net/wireguard/Kconfig
 
-          for f in \
+          git -C wireguard-linux-compat \
+            describe \
+            --tags \
+            --always
+
+          echo
+          echo "=== ENABLE REQUIRED KERNEL CONFIGS ==="
+
+          set_config_y() {
+            local file="$1"
+            local option="$2"
+
+            if grep -q \
+              "^# ${option} is not set$" \
+              "$file"
+            then
+              sed -i \
+                "s/^# ${option} is not set$/${option}=y/" \
+                "$file"
+
+            elif grep -q \
+              "^${option}=" \
+              "$file"
+            then
+              sed -i \
+                "s/^${option}=.*/${option}=y/" \
+                "$file"
+
+            else
+              printf '\n%s=y\n' "$option" >> "$file"
+            fi
+
+            grep -qx \
+              "${option}=y" \
+              "$file"
+          }
+
+          for config_file in \
             arch/arm64/configs/exynos9810_defconfig \
             arch/arm64/configs/exynos9810_stock_defconfig
           do
-            test -f "$f"
+            test -f "$config_file"
 
-            sed -i \
-              's/# CONFIG_NF_NAT_MASQUERADE_IPV6 is not set/CONFIG_NF_NAT_MASQUERADE_IPV6=y/' \
-              "$f"
+            set_config_y \
+              "$config_file" \
+              CONFIG_WIREGUARD
 
-            sed -i \
-              's/# CONFIG_IP6_NF_TARGET_MASQUERADE is not set/CONFIG_IP6_NF_TARGET_MASQUERADE=y/' \
-              "$f"
+            set_config_y \
+              "$config_file" \
+              CONFIG_NF_NAT_MASQUERADE_IPV6
 
-            grep -qx \
-              'CONFIG_NF_NAT_MASQUERADE_IPV6=y' \
-              "$f"
+            set_config_y \
+              "$config_file" \
+              CONFIG_IP6_NF_TARGET_MASQUERADE
 
-            grep -qx \
-              'CONFIG_IP6_NF_TARGET_MASQUERADE=y' \
-              "$f"
+            echo
+            echo "=== CHECK $config_file ==="
+
+            grep -E \
+              '^(CONFIG_WIREGUARD|CONFIG_NF_NAT_MASQUERADE_IPV6|CONFIG_IP6_NF_TARGET_MASQUERADE)=' \
+              "$config_file"
           done
 
+          echo
           echo "=== PATCH BUILD SCRIPT ==="
 
-          if ! grep -qx 'set -e' build_kernel.sh; then
-            sed -i '2i set -e' build_kernel.sh
+          test -f build_kernel.sh
+
+          if ! grep -qx \
+            'set -e' \
+            build_kernel.sh
+          then
+            sed -i \
+              '2i set -e' \
+              build_kernel.sh
           fi
 
           python3 <<'PY'
@@ -203,22 +269,21 @@ jobs:
 
           needle = "make exynos9810_temp_defconfig\n"
 
-          replacement = (
+          checks = (
               "make exynos9810_temp_defconfig\n"
+              "grep -qx 'CONFIG_WIREGUARD=y' .config\n"
               "grep -qx 'CONFIG_NF_NAT_MASQUERADE_IPV6=y' .config\n"
               "grep -qx 'CONFIG_IP6_NF_TARGET_MASQUERADE=y' .config\n"
-              "grep -qx 'CONFIG_WIREGUARD=y' .config\n"
           )
 
           if needle not in text:
               raise SystemExit(
-                  "Không tìm thấy make exynos9810_temp_defconfig"
+                  "ERROR: make exynos9810_temp_defconfig not found"
               )
 
           if "grep -qx 'CONFIG_WIREGUARD=y' .config" not in text:
-              text = text.replace(needle, replacement)
+              text = text.replace(needle, checks)
 
-          # Chạy build tuần tự và hiện đầy đủ lệnh compiler để bắt lỗi thật.
           text = re.sub(
               r"make\s+-j\$\(\s*nproc(?:\s+--all)?\s*\)",
               "make V=1 -j1",
@@ -229,73 +294,148 @@ jobs:
           PY
 
           sed -i \
-            "s|export CC=.*|export CC=/usr/bin/clang-16|g" \
+            "s|^export CC=.*|export CC=/usr/bin/clang-16|g" \
             build_kernel.sh
 
           sed -i \
-            "s|export CROSS_COMPILE=.*|export CROSS_COMPILE=/usr/bin/aarch64-linux-gnu-|g" \
+            "s|^export CROSS_COMPILE=.*|export CROSS_COMPILE=/usr/bin/aarch64-linux-gnu-|g" \
             build_kernel.sh
 
           sed -i \
-            "s|export CROSS_COMPILE_ARM32=.*|export CROSS_COMPILE_ARM32=\$(pwd)/toolchains/gcc32/bin/arm-eabi-|g" \
+            "s|^export CROSS_COMPILE_ARM32=.*|export CROSS_COMPILE_ARM32=\$(pwd)/toolchains/gcc32/bin/arm-eabi-|g" \
             build_kernel.sh
 
           sed -i \
-            "s|export CLANG_TRIPLE=.*|export CLANG_TRIPLE=aarch64-linux-gnu-|g" \
+            "s|^export CLANG_TRIPLE=.*|export CLANG_TRIPLE=aarch64-linux-gnu-|g" \
             build_kernel.sh
 
           sed -i \
-            "s|ZIP_DIR=.*|ZIP_DIR=\"\$(pwd)/Zip/\"|g" \
+            "s|^ZIP_DIR=.*|ZIP_DIR=\"\$(pwd)/Zip/\"|g" \
             build_kernel.sh
 
           sed -i \
-            "s|ZIP_ALT_DIR=.*|ZIP_ALT_DIR=\"\$(pwd)/NO_ZIP_ALT/\"|g" \
+            "s|^ZIP_ALT_DIR=.*|ZIP_ALT_DIR=\"\$(pwd)/NO_ZIP_ALT/\"|g" \
             build_kernel.sh
 
           rm -rf NO_ZIP_ALT
+
           chmod +x build_kernel.sh
 
-          echo "=== FINAL CONFIG SOURCE CHECK ==="
+          cp -f \
+            build_kernel.sh \
+            build_kernel-patched.sh
 
-          grep -E \
-            'CONFIG_NF_NAT_MASQUERADE_IPV6|CONFIG_IP6_NF_TARGET_MASQUERADE|CONFIG_WIREGUARD' \
-            arch/arm64/configs/exynos9810_defconfig
+          echo
+          echo "=== TOOLCHAIN SETTINGS AFTER PATCH ==="
 
+          grep -nE \
+            '^(export CC|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|ZIP_DIR|ZIP_ALT_DIR)' \
+            build_kernel.sh
+
+          echo
           echo "=== MAKE COMMANDS AFTER DEBUG PATCH ==="
-          grep -nE 'make (V=1 )?-j' build_kernel.sh || true
 
-          cp build_kernel.sh build_kernel-patched.sh
+          grep -nE \
+            'make (V=1 )?-j' \
+            build_kernel.sh \
+            || true
+
+          echo
+          echo "=== FINAL DEFCONFIG CHECK ==="
+
+          for config_file in \
+            arch/arm64/configs/exynos9810_defconfig \
+            arch/arm64/configs/exynos9810_stock_defconfig
+          do
+            echo "--- $config_file ---"
+
+            grep -E \
+              '^(CONFIG_WIREGUARD|CONFIG_NF_NAT_MASQUERADE_IPV6|CONFIG_IP6_NF_TARGET_MASQUERADE)=' \
+              "$config_file"
+          done
+
+          echo
+          echo "=== PATCH FINISHED: $(date -u) ==="
 
       - name: 6. Build S9 S9Plus and Note9 with full log
         run: |
-          set -o pipefail
+          set -Eeuo pipefail
 
-          echo "=== BUILD STARTED: $(date -u) ===" | tee build-full.log
+          echo \
+            "=== BUILD STARTED: $(date -u) ===" \
+            | tee build-full.log
 
-          ./build_kernel.sh -a 2>&1 | tee -a build-full.log
+          ./build_kernel.sh -a \
+            2>&1 \
+            | tee -a build-full.log
 
-          echo "=== BUILD FINISHED: $(date -u) ===" | tee -a build-full.log
+          echo \
+            "=== BUILD FINISHED: $(date -u) ===" \
+            | tee -a build-full.log
 
       - name: 7. Collect debug files
         if: always()
         run: |
+          set +e
+
           mkdir -p debug-files
 
-          cp -f build-full.log debug-files/ 2>/dev/null || true
-          cp -f toolchain-info.txt debug-files/ 2>/dev/null || true
-          cp -f build_kernel.sh debug-files/ 2>/dev/null || true
-          cp -f build_kernel-patched.sh debug-files/ 2>/dev/null || true
-          cp -f .config debug-files/final-dot-config.txt 2>/dev/null || true
+          cp -f \
+            patch-full.log \
+            debug-files/ \
+            2>/dev/null
+
+          cp -f \
+            build-full.log \
+            debug-files/ \
+            2>/dev/null
+
+          cp -f \
+            toolchain-info.txt \
+            debug-files/ \
+            2>/dev/null
+
+          cp -f \
+            build_kernel.sh \
+            debug-files/ \
+            2>/dev/null
+
+          cp -f \
+            build_kernel-patched.sh \
+            debug-files/ \
+            2>/dev/null
+
+          cp -f \
+            .config \
+            debug-files/final-dot-config.txt \
+            2>/dev/null
 
           cp -f \
             arch/arm64/configs/exynos9810_defconfig \
-            debug-files/ 2>/dev/null || true
+            debug-files/ \
+            2>/dev/null
 
           cp -f \
             arch/arm64/configs/exynos9810_stock_defconfig \
-            debug-files/ 2>/dev/null || true
+            debug-files/ \
+            2>/dev/null
 
-          find debug-files -maxdepth 1 -type f -printf '%f %s bytes\n' || true
+          cp -f \
+            net/wireguard/Kconfig \
+            debug-files/wireguard-Kconfig.txt \
+            2>/dev/null
+
+          git diff \
+            > debug-files/kernel-workflow-changes.diff \
+            2>/dev/null
+
+          {
+            echo "=== DEBUG FILE LIST ==="
+            find debug-files \
+              -maxdepth 1 \
+              -type f \
+              -printf '%f %s bytes\n'
+          } | tee debug-files/debug-file-list.txt
 
       - name: 8. Upload full build logs
         if: always()
@@ -308,7 +448,7 @@ jobs:
 
       - name: 9. Package universal flash ZIP
         run: |
-          set -e
+          set -Eeuo pipefail
 
           test -s Zip/Kernel/starlte/zImage
           test -s Zip/Kernel/starlte/dtb.img
@@ -343,14 +483,22 @@ jobs:
             Zip/Kernel/crownlte/dtb.img \
             Flashable_Dir/Kernel/crownlte/dtb.img
 
-          rm -f Universal-Kernel-S9-Series-IPv6-Ready.zip
+          rm -f \
+            Universal-Kernel-S9-Series-IPv6-Ready.zip
 
           cd Flashable_Dir
-          zip -r9 ../Universal-Kernel-S9-Series-IPv6-Ready.zip .
+
+          zip -r9 \
+            ../Universal-Kernel-S9-Series-IPv6-Ready.zip \
+            .
+
           cd ..
 
-          test -s Universal-Kernel-S9-Series-IPv6-Ready.zip
-          unzip -t Universal-Kernel-S9-Series-IPv6-Ready.zip
+          test -s \
+            Universal-Kernel-S9-Series-IPv6-Ready.zip
+
+          unzip -t \
+            Universal-Kernel-S9-Series-IPv6-Ready.zip
 
       - name: 10. Upload flashable ZIP
         uses: actions/upload-artifact@v4
@@ -358,3 +506,4 @@ jobs:
           name: Universal-Kernel-Farm
           path: Universal-Kernel-S9-Series-IPv6-Ready.zip
           if-no-files-found: error
+          retention-days: 7
