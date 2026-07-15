@@ -309,6 +309,26 @@ jobs:
             "s|^export CLANG_TRIPLE=.*|export CLANG_TRIPLE=aarch64-linux-gnu-|g" \
             build_kernel.sh
 
+          echo
+          echo "=== APPLY CLANG 16 COMPATIBILITY FLAG ==="
+
+          if grep -q \
+            '^export KCFLAGS=' \
+            build_kernel.sh
+          then
+            sed -i \
+              's|^export KCFLAGS=.*|export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end"|' \
+              build_kernel.sh
+          else
+            sed -i \
+              '/^export CONFIG_SECTION_MISMATCH_WARN_ONLY=y/a export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end"' \
+              build_kernel.sh
+          fi
+
+          grep -qx \
+            'export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end"' \
+            build_kernel.sh
+
           sed -i \
             "s|^ZIP_DIR=.*|ZIP_DIR=\"\$(pwd)/Zip/\"|g" \
             build_kernel.sh
@@ -329,7 +349,7 @@ jobs:
           echo "=== TOOLCHAIN SETTINGS AFTER PATCH ==="
 
           grep -nE \
-            '^(export CC|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|ZIP_DIR|ZIP_ALT_DIR)' \
+            '^(export CC|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|export KCFLAGS|ZIP_DIR|ZIP_ALT_DIR)' \
             build_kernel.sh
 
           echo
@@ -431,6 +451,7 @@ jobs:
 
           {
             echo "=== DEBUG FILE LIST ==="
+
             find debug-files \
               -maxdepth 1 \
               -type f \
