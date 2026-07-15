@@ -28,6 +28,7 @@ jobs:
             bison \
             build-essential \
             curl \
+            file \
             flex \
             gcc-aarch64-linux-gnu \
             binutils-aarch64-linux-gnu \
@@ -116,7 +117,7 @@ jobs:
           test -d Flashable_Dir/Kernel/star2lte
           test -d Flashable_Dir/Kernel/crownlte
 
-      - name: 5. Pin WireGuard and patch configs
+      - name: 5. Pin WireGuard and patch build
         run: |
           set -Eeuo pipefail
 
@@ -129,7 +130,7 @@ jobs:
           mkdir -p Zip/Kernel/crownlte
 
           echo
-          echo "=== DISABLE OLD AUTO WIREGUARD FETCH ==="
+          echo "=== DISABLE OLD WIREGUARD AUTO FETCH ==="
 
           test -f scripts/Kbuild.include
 
@@ -146,7 +147,7 @@ jobs:
           fi
 
           echo
-          echo "=== INSTALL PINNED WIREGUARD v1.0.20220627 ==="
+          echo "=== INSTALL WIREGUARD v1.0.20220627 ==="
 
           rm -rf net/wireguard
           rm -rf wireguard-linux-compat
@@ -159,8 +160,7 @@ jobs:
             https://git.zx2c4.com/wireguard-linux-compat \
             wireguard-linux-compat
           then
-            echo "Official WireGuard server clone failed."
-            echo "Trying GitHub mirror..."
+            echo "Official server failed. Trying GitHub mirror."
 
             rm -rf wireguard-linux-compat
 
@@ -175,20 +175,11 @@ jobs:
           test -s wireguard-linux-compat/src/Makefile
           test -s wireguard-linux-compat/src/main.c
 
-          cp -a \
-            wireguard-linux-compat/src/. \
-            net/wireguard/
+          cp -a wireguard-linux-compat/src/. net/wireguard/
 
           test -s net/wireguard/Kconfig
           test -s net/wireguard/Makefile
           test -s net/wireguard/main.c
-
-          echo
-          echo "=== WIREGUARD SOURCE READY ==="
-
-          grep -n \
-            'config WIREGUARD' \
-            net/wireguard/Kconfig
 
           git -C wireguard-linux-compat \
             describe \
@@ -196,24 +187,18 @@ jobs:
             --always
 
           echo
-          echo "=== ENABLE REQUIRED KERNEL CONFIGS ==="
+          echo "=== ENABLE REQUIRED CONFIGS ==="
 
           set_config_y() {
             local file="$1"
             local option="$2"
 
-            if grep -q \
-              "^# ${option} is not set$" \
-              "$file"
-            then
+            if grep -q "^# ${option} is not set$" "$file"; then
               sed -i \
                 "s/^# ${option} is not set$/${option}=y/" \
                 "$file"
 
-            elif grep -q \
-              "^${option}=" \
-              "$file"
-            then
+            elif grep -q "^${option}=" "$file"; then
               sed -i \
                 "s/^${option}=.*/${option}=y/" \
                 "$file"
@@ -222,9 +207,7 @@ jobs:
               printf '\n%s=y\n' "$option" >> "$file"
             fi
 
-            grep -qx \
-              "${option}=y" \
-              "$file"
+            grep -qx "${option}=y" "$file"
           }
 
           for config_file in \
@@ -233,20 +216,11 @@ jobs:
           do
             test -f "$config_file"
 
-            set_config_y \
-              "$config_file" \
-              CONFIG_WIREGUARD
+            set_config_y "$config_file" CONFIG_WIREGUARD
+            set_config_y "$config_file" CONFIG_NF_NAT_MASQUERADE_IPV6
+            set_config_y "$config_file" CONFIG_IP6_NF_TARGET_MASQUERADE
 
-            set_config_y \
-              "$config_file" \
-              CONFIG_NF_NAT_MASQUERADE_IPV6
-
-            set_config_y \
-              "$config_file" \
-              CONFIG_IP6_NF_TARGET_MASQUERADE
-
-            echo
-            echo "=== CHECK $config_file ==="
+            echo "--- $config_file ---"
 
             grep -E \
               '^(CONFIG_WIREGUARD|CONFIG_NF_NAT_MASQUERADE_IPV6|CONFIG_IP6_NF_TARGET_MASQUERADE)=' \
@@ -254,7 +228,7 @@ jobs:
           done
 
           echo
-          echo "=== CREATE AARCH64 BINUTILS WRAPPER ==="
+          echo "=== CREATE AARCH64 TOOL WRAPPER ==="
 
           AARCH64_WRAPPER_ROOT="$(pwd)/toolchains/aarch64-wrapper"
           AARCH64_WRAPPER_BIN="${AARCH64_WRAPPER_ROOT}/bin"
@@ -290,7 +264,7 @@ jobs:
               "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-${tool}"
           done
 
-          # Clang với -no-integrated-as tìm tên "as" và "ld"
+          # Clang -no-integrated-as gọi trực tiếp tên as.
           ln -sfn \
             /usr/bin/aarch64-linux-gnu-as \
             "$AARCH64_WRAPPER_BIN/as"
@@ -305,36 +279,21 @@ jobs:
           test -x "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-as"
           test -x "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-ld"
 
-          echo
-          echo "=== VERIFY AARCH64 WRAPPER ==="
-
           "$AARCH64_WRAPPER_BIN/as" --version
           "$AARCH64_WRAPPER_BIN/ld" --version
-          "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-gcc" --version
-
-          echo "AS real path: $(readlink -f "$AARCH64_WRAPPER_BIN/as")"
-          echo "LD real path: $(readlink -f "$AARCH64_WRAPPER_BIN/ld")"
 
           echo
-          echo "=== VERIFY HOST COMPILER REMAINS X86_64 ==="
-
-          command -v gcc
-          /usr/bin/gcc -dumpmachine
+          echo "=== VERIFY HOST COMPILER ==="
 
           test "$(/usr/bin/gcc -dumpmachine)" = "x86_64-linux-gnu"
 
           echo
-          echo "=== PATCH BUILD SCRIPT ==="
+          echo "=== PATCH build_kernel.sh ==="
 
           test -f build_kernel.sh
 
-          if ! grep -qx \
-            'set -e' \
-            build_kernel.sh
-          then
-            sed -i \
-              '2i set -e' \
-              build_kernel.sh
+          if ! grep -qx 'set -e' build_kernel.sh; then
+            sed -i '2i set -e' build_kernel.sh
           fi
 
           python3 <<'PY'
@@ -361,6 +320,7 @@ jobs:
           if "grep -qx 'CONFIG_WIREGUARD=y' .config" not in text:
               text = text.replace(needle, checks)
 
+          # Debug tuần tự để log lỗi không bị trộn.
           text = re.sub(
               r"make\s+-j\$\(\s*nproc(?:\s+--all)?\s*\)",
               "make V=1 -j1",
@@ -382,6 +342,7 @@ jobs:
             "s|^export CROSS_COMPILE_ARM32=.*|export CROSS_COMPILE_ARM32=\$(pwd)/toolchains/gcc32/bin/arm-eabi-|g" \
             build_kernel.sh
 
+          # Source gốc có thể có nhiều dòng CLANG_TRIPLE.
           sed -i \
             '/^export CLANG_TRIPLE=/d' \
             build_kernel.sh
@@ -390,49 +351,26 @@ jobs:
             "/^export CROSS_COMPILE_ARM32=/a export CLANG_TRIPLE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
             build_kernel.sh
 
-          # Xóa PATH wrapper cũ nếu từng được chèn
+          # Không được thêm wrapper ARM64 vào PATH vì HOSTCC phải là x86_64.
           sed -i \
             '/^export PATH=.*aarch64-wrapper/d' \
             build_kernel.sh
 
-          # Ép các công cụ host dùng compiler x86_64
+          # Xóa biến host cũ nếu có, rồi chèn lại đúng một lần.
+          sed -i \
+            '/^export HOSTCC=/d; /^export HOSTCXX=/d; /^export HOSTLD=/d' \
+            build_kernel.sh
+
           sed -i \
             '/^export CC=/a export HOSTCC=/usr/bin/gcc\nexport HOSTCXX=/usr/bin/g++\nexport HOSTLD=/usr/bin/ld' \
             build_kernel.sh
 
-          grep -qx \
-            "export CROSS_COMPILE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
-            build_kernel.sh
-
-          grep -qx \
-            "export CLANG_TRIPLE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
-            build_kernel.sh
-
-          grep -qx \
-            'export HOSTCC=/usr/bin/gcc' \
-            build_kernel.sh
-
-          grep -qx \
-            'export HOSTCXX=/usr/bin/g++' \
-            build_kernel.sh
-
-          if grep -q \
-            '^export PATH=.*aarch64-wrapper' \
-            build_kernel.sh
-          then
-            echo "ERROR: ARM64 wrapper must not be added to PATH"
-            exit 1
-          fi
-
           echo
           echo "=== APPLY CLANG 16 COMPATIBILITY FLAGS ==="
 
-          CLANG_COMPAT_FLAGS="-Wno-error=gnu-variable-sized-type-not-at-end -Wno-error=unused-command-line-argument"
+          CLANG_COMPAT_FLAGS="-Wno-error=gnu-variable-sized-type-not-at-end -Wno-error=unused-command-line-argument -Wno-error=single-bit-bitfield-constant-conversion"
 
-          if grep -q \
-            '^export KCFLAGS=' \
-            build_kernel.sh
-          then
+          if grep -q '^export KCFLAGS=' build_kernel.sh; then
             sed -i \
               "s|^export KCFLAGS=.*|export KCFLAGS=\"${CLANG_COMPAT_FLAGS}\"|" \
               build_kernel.sh
@@ -443,7 +381,7 @@ jobs:
           fi
 
           grep -qx \
-            'export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end -Wno-error=unused-command-line-argument"' \
+            'export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end -Wno-error=unused-command-line-argument -Wno-error=single-bit-bitfield-constant-conversion"' \
             build_kernel.sh
 
           sed -i \
@@ -457,10 +395,7 @@ jobs:
           rm -rf NO_ZIP_ALT
 
           chmod +x build_kernel.sh
-
-          cp -f \
-            build_kernel.sh \
-            build_kernel-patched.sh
+          cp -f build_kernel.sh build_kernel-patched.sh
 
           echo
           echo "=== TOOLCHAIN SETTINGS AFTER PATCH ==="
@@ -469,16 +404,21 @@ jobs:
             '^(export CC|export HOSTCC|export HOSTCXX|export HOSTLD|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|export PATH|export KCFLAGS|ZIP_DIR|ZIP_ALT_DIR)' \
             build_kernel.sh
 
-          echo
-          echo "=== VERIFY NO ARM64 WRAPPER IN PATH ==="
-
           if grep -q \
             '^export PATH=.*aarch64-wrapper' \
             build_kernel.sh
           then
-            echo "ERROR: Wrapper is still in PATH"
+            echo "ERROR: ARM64 wrapper must not be added to PATH"
             exit 1
           fi
+
+          grep -qx \
+            'export HOSTCC=/usr/bin/gcc' \
+            build_kernel.sh
+
+          grep -qx \
+            'export HOSTCXX=/usr/bin/g++' \
+            build_kernel.sh
 
           echo
           echo "=== HOST FIXDEP TEST ==="
@@ -497,20 +437,8 @@ jobs:
           file scripts/basic/fixdep \
             | grep -q "x86-64"
 
-          scripts/basic/fixdep 2>&1 \
-            | head -n 2 \
-            || true
-
           echo
-          echo "=== MAKE COMMANDS AFTER DEBUG PATCH ==="
-
-          grep -nE \
-            'make (V=1 )?-j' \
-            build_kernel.sh \
-            || true
-
-          echo
-          echo "=== FINAL DEFCONFIG CHECK ==="
+          echo "=== FINAL CONFIG CHECK ==="
 
           for config_file in \
             arch/arm64/configs/exynos9810_defconfig \
@@ -526,7 +454,7 @@ jobs:
           echo
           echo "=== PATCH FINISHED: $(date -u) ==="
 
-      - name: 6. Build S9 S9Plus and Note9 with full log
+      - name: 6. Build all devices with full log
         run: |
           set -Eeuo pipefail
 
@@ -634,8 +562,7 @@ jobs:
             Zip/Kernel/crownlte/dtb.img \
             Flashable_Dir/Kernel/crownlte/dtb.img
 
-          rm -f \
-            Universal-Kernel-S9-Series-IPv6-Ready.zip
+          rm -f Universal-Kernel-S9-Series-IPv6-Ready.zip
 
           cd Flashable_Dir
 
@@ -645,11 +572,8 @@ jobs:
 
           cd ..
 
-          test -s \
-            Universal-Kernel-S9-Series-IPv6-Ready.zip
-
-          unzip -t \
-            Universal-Kernel-S9-Series-IPv6-Ready.zip
+          test -s Universal-Kernel-S9-Series-IPv6-Ready.zip
+          unzip -t Universal-Kernel-S9-Series-IPv6-Ready.zip
 
       - name: 10. Upload flashable ZIP
         uses: actions/upload-artifact@v4
