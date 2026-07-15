@@ -11,6 +11,7 @@ name: Build Kernel Exynos 9810 IPv6
 jobs:
   build-universal:
     runs-on: ubuntu-22.04
+    timeout-minutes: 180
 
     steps:
       - name: 1. Checkout source
@@ -35,6 +36,7 @@ jobs:
             python3 \
             unzip \
             wget \
+            xz-utils \
             zip
 
           wget -qO llvm.sh https://apt.llvm.org/llvm.sh
@@ -91,7 +93,7 @@ jobs:
           test -d Flashable_Dir/Kernel/star2lte
           test -d Flashable_Dir/Kernel/crownlte
 
-      - name: 5. Patch config and build script
+      - name: 5. Pin WireGuard and patch configs
         run: |
           set -e
 
@@ -99,11 +101,62 @@ jobs:
           mkdir -p Zip/Kernel/star2lte
           mkdir -p Zip/Kernel/crownlte
 
-          # Bật IPv6 MASQUERADE trong cả hai defconfig nền
+          echo "=== DISABLE OLD AUTO WIREGUARD FETCH ==="
+
+          test -f scripts/Kbuild.include
+
+          sed -i \
+            '/fetch-latest-wireguard\.sh/d' \
+            scripts/Kbuild.include
+
+          if grep -q 'fetch-latest-wireguard\.sh' scripts/Kbuild.include; then
+            echo "ERROR: WireGuard auto-fetch hook still exists"
+            exit 1
+          fi
+
+          echo "=== INSTALL PINNED WIREGUARD v1.0.20220627 ==="
+
+          rm -rf \
+            net/wireguard \
+            wireguard-linux-compat-1.0.20220627 \
+            wireguard-linux-compat-1.0.20220627.tar.xz
+
+          wget -q --show-progress \
+            https://git.zx2c4.com/wireguard-linux-compat/snapshot/wireguard-linux-compat-1.0.20220627.tar.xz \
+            -O wireguard-linux-compat-1.0.20220627.tar.xz
+
+          test -s wireguard-linux-compat-1.0.20220627.tar.xz
+          xz -t wireguard-linux-compat-1.0.20220627.tar.xz
+          tar -tJf wireguard-linux-compat-1.0.20220627.tar.xz >/dev/null
+
+          mkdir -p net/wireguard
+
+          tar -xJf wireguard-linux-compat-1.0.20220627.tar.xz \
+            --strip-components=2 \
+            -C net/wireguard \
+            wireguard-linux-compat-1.0.20220627/src
+
+          sed -i \
+            's/tristate/bool/; s/default m/default y/' \
+            net/wireguard/Kconfig
+
+          touch net/wireguard/.check
+
+          test -s net/wireguard/Kconfig
+          test -s net/wireguard/Makefile
+          test -s net/wireguard/main.c
+
+          echo "=== WIREGUARD READY ==="
+          grep -n 'config WIREGUARD' net/wireguard/Kconfig
+
+          echo "=== ENABLE IPV6 MASQUERADE ==="
+
           for f in \
             arch/arm64/configs/exynos9810_defconfig \
             arch/arm64/configs/exynos9810_stock_defconfig
           do
+            test -f "$f"
+
             sed -i \
               's/# CONFIG_NF_NAT_MASQUERADE_IPV6 is not set/CONFIG_NF_NAT_MASQUERADE_IPV6=y/' \
               "$f"
@@ -112,16 +165,21 @@ jobs:
               's/# CONFIG_IP6_NF_TARGET_MASQUERADE is not set/CONFIG_IP6_NF_TARGET_MASQUERADE=y/' \
               "$f"
 
-            grep -qx 'CONFIG_NF_NAT_MASQUERADE_IPV6=y' "$f"
-            grep -qx 'CONFIG_IP6_NF_TARGET_MASQUERADE=y' "$f"
+            grep -qx \
+              'CONFIG_NF_NAT_MASQUERADE_IPV6=y' \
+              "$f"
+
+            grep -qx \
+              'CONFIG_IP6_NF_TARGET_MASQUERADE=y' \
+              "$f"
           done
 
-          # Bắt build_kernel.sh dừng ngay khi có lỗi
+          echo "=== PATCH BUILD SCRIPT ==="
+
           if ! grep -qx 'set -e' build_kernel.sh; then
             sed -i '2i set -e' build_kernel.sh
           fi
 
-          # Chèn kiểm tra .config cuối sau mỗi lần tạo temp defconfig
           python3 <<'PY'
           from pathlib import Path
 
@@ -129,26 +187,25 @@ jobs:
           text = path.read_text()
 
           needle = "make exynos9810_temp_defconfig\n"
-          check_1 = "grep -qx 'CONFIG_NF_NAT_MASQUERADE_IPV6=y' .config"
-          check_2 = "grep -qx 'CONFIG_IP6_NF_TARGET_MASQUERADE=y' .config"
+
+          replacement = (
+              "make exynos9810_temp_defconfig\n"
+              "grep -qx 'CONFIG_NF_NAT_MASQUERADE_IPV6=y' .config\n"
+              "grep -qx 'CONFIG_IP6_NF_TARGET_MASQUERADE=y' .config\n"
+              "grep -qx 'CONFIG_WIREGUARD=y' .config\n"
+          )
 
           if needle not in text:
               raise SystemExit(
-                  "Không tìm thấy lệnh make exynos9810_temp_defconfig"
+                  "Không tìm thấy make exynos9810_temp_defconfig"
               )
 
-          if check_1 not in text:
-              replacement = (
-                  "make exynos9810_temp_defconfig\n"
-                  "grep -qx 'CONFIG_NF_NAT_MASQUERADE_IPV6=y' .config\n"
-                  "grep -qx 'CONFIG_IP6_NF_TARGET_MASQUERADE=y' .config\n"
-              )
+          if "grep -qx 'CONFIG_WIREGUARD=y' .config" not in text:
               text = text.replace(needle, replacement)
 
           path.write_text(text)
           PY
 
-          # Đổi đường dẫn toolchain sang môi trường GitHub Actions
           sed -i \
             "s|export CC=.*|export CC=/usr/bin/clang-16|g" \
             build_kernel.sh
@@ -176,9 +233,10 @@ jobs:
           rm -rf NO_ZIP_ALT
           chmod +x build_kernel.sh
 
-          echo "=== FINAL DEFCONFIG CHECK ==="
+          echo "=== FINAL CONFIG SOURCE CHECK ==="
+
           grep -E \
-            'CONFIG_NF_NAT_MASQUERADE_IPV6|CONFIG_IP6_NF_TARGET_MASQUERADE' \
+            'CONFIG_NF_NAT_MASQUERADE_IPV6|CONFIG_IP6_NF_TARGET_MASQUERADE|CONFIG_WIREGUARD' \
             arch/arm64/configs/exynos9810_defconfig
 
       - name: 6. Build S9 S9Plus and Note9
@@ -199,22 +257,28 @@ jobs:
           test -s Zip/Kernel/crownlte/zImage
           test -s Zip/Kernel/crownlte/dtb.img
 
-          cp -f Zip/Kernel/starlte/zImage \
+          cp -f \
+            Zip/Kernel/starlte/zImage \
             Flashable_Dir/Kernel/starlte/zImage
 
-          cp -f Zip/Kernel/starlte/dtb.img \
+          cp -f \
+            Zip/Kernel/starlte/dtb.img \
             Flashable_Dir/Kernel/starlte/dtb.img
 
-          cp -f Zip/Kernel/star2lte/zImage \
+          cp -f \
+            Zip/Kernel/star2lte/zImage \
             Flashable_Dir/Kernel/star2lte/zImage
 
-          cp -f Zip/Kernel/star2lte/dtb.img \
+          cp -f \
+            Zip/Kernel/star2lte/dtb.img \
             Flashable_Dir/Kernel/star2lte/dtb.img
 
-          cp -f Zip/Kernel/crownlte/zImage \
+          cp -f \
+            Zip/Kernel/crownlte/zImage \
             Flashable_Dir/Kernel/crownlte/zImage
 
-          cp -f Zip/Kernel/crownlte/dtb.img \
+          cp -f \
+            Zip/Kernel/crownlte/dtb.img \
             Flashable_Dir/Kernel/crownlte/dtb.img
 
           rm -f Universal-Kernel-S9-Series-IPv6-Ready.zip
