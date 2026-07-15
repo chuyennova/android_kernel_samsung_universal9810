@@ -11,7 +11,7 @@ name: Build Kernel Exynos 9810 IPv6
 jobs:
   build-universal:
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
+    timeout-minutes: 360
 
     steps:
       - name: 1. Checkout source
@@ -50,11 +50,22 @@ jobs:
           test -x /usr/bin/aarch64-linux-gnu-ld
           test -x /usr/bin/aarch64-linux-gnu-elfedit
 
-          echo "=== CLANG ==="
-          /usr/bin/clang-16 --version
+          {
+            echo "=== CLANG ==="
+            /usr/bin/clang-16 --version
 
-          echo "=== GCC AARCH64 ==="
-          /usr/bin/aarch64-linux-gnu-gcc --version
+            echo
+            echo "=== GCC AARCH64 ==="
+            /usr/bin/aarch64-linux-gnu-gcc --version
+
+            echo
+            echo "=== GNU AS ==="
+            /usr/bin/aarch64-linux-gnu-as --version
+
+            echo
+            echo "=== GNU LD ==="
+            /usr/bin/aarch64-linux-gnu-ld --version
+          } | tee toolchain-info.txt
 
       - name: 3. Download ARM32 arm-eabi toolchain
         run: |
@@ -72,8 +83,11 @@ jobs:
           test -x toolchains/gcc32/bin/arm-eabi-as
           test -x toolchains/gcc32/bin/arm-eabi-ld
 
-          echo "=== GCC ARM32 ==="
-          toolchains/gcc32/bin/arm-eabi-gcc --version
+          {
+            echo
+            echo "=== GCC ARM32 ==="
+            toolchains/gcc32/bin/arm-eabi-gcc --version
+          } | tee -a toolchain-info.txt
 
       - name: 4. Download original v45.4 flash ZIP
         run: |
@@ -182,6 +196,7 @@ jobs:
 
           python3 <<'PY'
           from pathlib import Path
+          import re
 
           path = Path("build_kernel.sh")
           text = path.read_text()
@@ -202,6 +217,13 @@ jobs:
 
           if "grep -qx 'CONFIG_WIREGUARD=y' .config" not in text:
               text = text.replace(needle, replacement)
+
+          # Chạy build tuần tự và hiện đầy đủ lệnh compiler để bắt lỗi thật.
+          text = re.sub(
+              r"make\s+-j\$\(\s*nproc(?:\s+--all)?\s*\)",
+              "make V=1 -j1",
+              text,
+          )
 
           path.write_text(text)
           PY
@@ -239,12 +261,52 @@ jobs:
             'CONFIG_NF_NAT_MASQUERADE_IPV6|CONFIG_IP6_NF_TARGET_MASQUERADE|CONFIG_WIREGUARD' \
             arch/arm64/configs/exynos9810_defconfig
 
-      - name: 6. Build S9 S9Plus and Note9
-        run: |
-          set -e
-          ./build_kernel.sh -a
+          echo "=== MAKE COMMANDS AFTER DEBUG PATCH ==="
+          grep -nE 'make (V=1 )?-j' build_kernel.sh || true
 
-      - name: 7. Package universal flash ZIP
+          cp build_kernel.sh build_kernel-patched.sh
+
+      - name: 6. Build S9 S9Plus and Note9 with full log
+        run: |
+          set -o pipefail
+
+          echo "=== BUILD STARTED: $(date -u) ===" | tee build-full.log
+
+          ./build_kernel.sh -a 2>&1 | tee -a build-full.log
+
+          echo "=== BUILD FINISHED: $(date -u) ===" | tee -a build-full.log
+
+      - name: 7. Collect debug files
+        if: always()
+        run: |
+          mkdir -p debug-files
+
+          cp -f build-full.log debug-files/ 2>/dev/null || true
+          cp -f toolchain-info.txt debug-files/ 2>/dev/null || true
+          cp -f build_kernel.sh debug-files/ 2>/dev/null || true
+          cp -f build_kernel-patched.sh debug-files/ 2>/dev/null || true
+          cp -f .config debug-files/final-dot-config.txt 2>/dev/null || true
+
+          cp -f \
+            arch/arm64/configs/exynos9810_defconfig \
+            debug-files/ 2>/dev/null || true
+
+          cp -f \
+            arch/arm64/configs/exynos9810_stock_defconfig \
+            debug-files/ 2>/dev/null || true
+
+          find debug-files -maxdepth 1 -type f -printf '%f %s bytes\n' || true
+
+      - name: 8. Upload full build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel-Build-Full-Log
+          path: debug-files/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: 9. Package universal flash ZIP
         run: |
           set -e
 
@@ -290,7 +352,7 @@ jobs:
           test -s Universal-Kernel-S9-Series-IPv6-Ready.zip
           unzip -t Universal-Kernel-S9-Series-IPv6-Ready.zip
 
-      - name: 8. Upload flashable ZIP
+      - name: 10. Upload flashable ZIP
         uses: actions/upload-artifact@v4
         with:
           name: Universal-Kernel-Farm
