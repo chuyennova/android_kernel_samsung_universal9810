@@ -310,23 +310,25 @@ jobs:
             build_kernel.sh
 
           echo
-          echo "=== APPLY CLANG 16 COMPATIBILITY FLAG ==="
+          echo "=== APPLY CLANG 16 COMPATIBILITY FLAGS ==="
+
+          CLANG_COMPAT_FLAGS="-Wno-error=gnu-variable-sized-type-not-at-end -Wno-error=unused-command-line-argument"
 
           if grep -q \
             '^export KCFLAGS=' \
             build_kernel.sh
           then
             sed -i \
-              's|^export KCFLAGS=.*|export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end"|' \
+              "s|^export KCFLAGS=.*|export KCFLAGS=\"${CLANG_COMPAT_FLAGS}\"|" \
               build_kernel.sh
           else
             sed -i \
-              '/^export CONFIG_SECTION_MISMATCH_WARN_ONLY=y/a export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end"' \
+              "/^export CONFIG_SECTION_MISMATCH_WARN_ONLY=y/a export KCFLAGS=\"${CLANG_COMPAT_FLAGS}\"" \
               build_kernel.sh
           fi
 
           grep -qx \
-            'export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end"' \
+            'export KCFLAGS="-Wno-error=gnu-variable-sized-type-not-at-end -Wno-error=unused-command-line-argument"' \
             build_kernel.sh
 
           sed -i \
