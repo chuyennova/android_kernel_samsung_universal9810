@@ -1,1 +1,149 @@
+name: Biên Dịch Kernel Farm Exynos 9810 (Bản Chuẩn QA Cuối Cùng)
 
+on:
+  workflow_dispatch: # Kích hoạt thủ công từ giao diện Web
+
+jobs:
+  build-universal:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: 1. Lấy mã nguồn từ Repo
+      uses: actions/checkout@v4
+
+    - name: 2. Cài đặt công cụ hệ thống và Clang 16 tinh gọn từ LLVM
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bc build-essential zip unzip curl git wget python3 \
+          libssl-dev libelf-dev flex bison \
+          gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+
+        # Nạp kho và cài đặt duy nhất Clang 16 (Bỏ hoàn toàn lld-16 thừa)
+        wget -qO llvm.sh https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh 16
+        sudo apt-get install -y clang-16
+
+    - name: 3. Tải ARM32 Toolchain theo Tag cố định và Kiểm tra hệ thống
+      run: |
+        mkdir -p toolchains
+        # Ghim chính xác tag android-8.1.0_r1 đã được Google kiểm định lỗi biên dịch
+        git clone --depth=1 \
+          -b android-8.1.0_r1 \
+          https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8 \
+          toolchains/gcc32
+
+        # Kiểm tra nghiêm ngặt sự hiện diện của toàn bộ các compiler phụ trợ và GNU binutils
+        command -v /usr/bin/clang-16
+        command -v /usr/bin/aarch64-linux-gnu-gcc
+        command -v /usr/bin/aarch64-linux-gnu-as
+        command -v /usr/bin/aarch64-linux-gnu-ld
+        command -v /usr/bin/aarch64-linux-gnu-elfedit
+        test -x toolchains/gcc32/bin/arm-eabi-gcc
+        test -x toolchains/gcc32/bin/arm-eabi-as
+        test -x toolchains/gcc32/bin/arm-eabi-ld
+
+        echo "=== XÁC THỰC MÔI TRƯỜNG BIÊN DỊCH ==="
+        /usr/bin/clang-16 --version
+        /usr/bin/aarch64-linux-gnu-gcc --version
+        toolchains/gcc32/bin/arm-eabi-gcc --version
+
+    - name: 4. Tải và Kiểm tra Cấu trúc Vỏ ZIP Flash v45.4
+      run: |
+        wget https://github.com/xxmustafacooTR/android_kernel_samsung_universal9810/releases/download/v45.4/xxmustafacooTR-45.4-ENFORCE.zip -O flashable.zip
+        
+        # CHỐT CHẶN TẢI FILE: Xác minh file tải về có dung lượng thực tế
+        test -s flashable.zip
+        
+        # BẪY FILE RÁC: Kiểm tra tính toàn vẹn cấu trúc file ZIP trước khi bung
+        unzip -t flashable.zip
+        
+        rm -rf Flashable_Dir
+        unzip -q flashable.zip -d Flashable_Dir
+        
+        # Xác minh vỏ ZIP chứa đủ cấu trúc thư mục của 3 dòng máy
+        test -d Flashable_Dir/Kernel/starlte
+        test -d Flashable_Dir/Kernel/star2lte
+        test -d Flashable_Dir/Kernel/crownlte
+
+    - name: 5. Khớp nối Môi trường & Tiêm Chốt Chặn Kconfig bằng Python
+      run: |
+        # Tạo sẵn cấu trúc thư mục đầu ra hứng sản phẩm cho lệnh cp
+        mkdir -p Zip/Kernel/{starlte,star2lte,crownlte}
+        
+        # Tiêm dừng lỗi khẩn cấp set -e vào dòng thứ 2 của script tác giả
+        sed -i '2i set -e' build_kernel.sh
+        
+        # TIÊM CHỐT CHẶN BẰNG PYTHON: Bẫy lỗi Kconfig tự hủy tùy chọn tại cả 6 hiệp build
+        python3 <<'PY'
+        from pathlib import Path
+        p = Path("build_kernel.sh")
+        text = p.read_text()
+        needle = "make exynos9810_temp_defconfig\n"
+        insert = (
+            "make exynos9810_temp_defconfig\n"
+            "    grep -qx 'CONFIG_NF_NAT_MASQUERADE_IPV6=y' .config\n"
+            "    grep -qx 'CONFIG_IP6_NF_TARGET_MASQUERADE=y' .config\n"
+        )
+        if needle not in text:
+            raise SystemExit("Lỗi: Không tìm thấy lệnh make exynos9810_temp_defconfig trong script!")
+        text = text.replace(needle, insert)
+        p.write_text(text)
+        PY
+        
+        # Điều chỉnh các biến môi trường Toolchain chuẩn xác (Clang biên dịch + GNU liên kết)
+        sed -i "s|export CC=.*|export CC=/usr/bin/clang-16|g" build_kernel.sh
+        sed -i "s|export CROSS_COMPILE=.*|export CROSS_COMPILE=/usr/bin/aarch64-linux-gnu-|g" build_kernel.sh
+        sed -i "s|export CROSS_COMPILE_ARM32=.*|export CROSS_COMPILE_ARM32=\$(pwd)/toolchains/gcc32/bin/arm-eabi-|g" build_kernel.sh
+        sed -i "s|export CLANG_TRIPLE=.*|export CLANG_TRIPLE=aarch64-linux-gnu-|g" build_kernel.sh
+        
+        # Đồng bộ thư mục đầu ra của bộ installer
+        sed -i "s|ZIP_DIR=.*|ZIP_DIR=\"\$(pwd)/Zip/\"|g" build_kernel.sh
+        
+        # Ép ZIP_ALT_DIR về thư mục ma không tồn tại để chặn luồng build Alternative
+        sed -i "s|ZIP_ALT_DIR=.*|ZIP_ALT_DIR=\"\$(pwd)/NO_ZIP_ALT/\"|g" build_kernel.sh
+        rm -rf NO_ZIP_ALT
+        
+        # SỬA VÀ KIỂM TRA ĐỒNG BỘ 2 FILE DEFCONFIG NỀN TỔNG
+        for f in \
+          arch/arm64/configs/exynos9810_defconfig \
+          arch/arm64/configs/exynos9810_stock_defconfig
+        do
+          sed -i 's/# CONFIG_NF_NAT_MASQUERADE_IPV6 is not set/CONFIG_NF_NAT_MASQUERADE_IPV6=y/' "$f"
+          sed -i 's/# CONFIG_IP6_NF_TARGET_MASQUERADE is not set/CONFIG_IP6_NF_TARGET_MASQUERADE=y/' "$f"
+
+          # Ép dừng workflow ngay lập tức nếu lệnh sửa đổi defconfig thất bại
+          grep -qx 'CONFIG_NF_NAT_MASQUERADE_IPV6=y' "$f"
+          grep -qx 'CONFIG_IP6_NF_TARGET_MASQUERADE=y' "$f"
+        done
+        
+        chmod +x build_kernel.sh
+
+    - name: 6. Kích hoạt biên dịch toàn farm máy (-a)
+      run: |
+        ./build_kernel.sh -a
+
+    - name: 7. Xác minh Output & Đóng gói ZIP vạn năng bằng dấu chấm (.)
+      run: |
+        # Kiểm tra sự tồn tại và tính toàn vẹn dung lượng (>0 bytes) của sản phẩm từng máy
+        test -s Zip/Kernel/starlte/zImage && test -s Zip/Kernel/starlte/dtb.img
+        test -s Zip/Kernel/star2lte/zImage && test -s Zip/Kernel/star2lte/dtb.img
+        test -s Zip/Kernel/crownlte/zImage && test -s Zip/Kernel/crownlte/dtb.img
+        
+        # Đè lõi nhân mới vừa được chốt chặn an toàn vào bộ vỏ ZIP gốc
+        cp -vr Zip/Kernel/* Flashable_Dir/Kernel/
+        
+        # Sử dụng dấu chấm (.) để thu giữ toàn bộ các file ẩn/thư mục ẩn cấu trúc installer
+        cd Flashable_Dir
+        zip -r9 ../Universal-Kernel-S9-Series-IPv6-Ready.zip .
+        
+        # KIỂM TRA THÀNH PHẨM CUỐI: Xác minh file ZIP đầu ra tồn tại và cấu trúc hoàn chỉnh
+        cd ..
+        test -s Universal-Kernel-S9-Series-IPv6-Ready.zip
+        unzip -t Universal-Kernel-S9-Series-IPv6-Ready.zip
+
+    - name: 8. Xuất file Flashable ZIP thành phẩm (Artifacts v4)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Universal-Kernel-Farm
+        path: Universal-Kernel-S9-Series-IPv6-Ready.zip
