@@ -46,6 +46,8 @@ jobs:
           sudo apt-get install -y clang-16
 
           test -x /usr/bin/clang-16
+          test -x /usr/bin/gcc
+          test -x /usr/bin/g++
           test -x /usr/bin/aarch64-linux-gnu-gcc
           test -x /usr/bin/aarch64-linux-gnu-as
           test -x /usr/bin/aarch64-linux-gnu-ld
@@ -53,6 +55,10 @@ jobs:
           test -x /usr/bin/aarch64-linux-gnu-elfedit
 
           {
+            echo "=== HOST GCC ==="
+            /usr/bin/gcc --version
+
+            echo
             echo "=== CLANG ==="
             /usr/bin/clang-16 --version
 
@@ -281,14 +287,18 @@ jobs:
 
             ln -sfn \
               "$source_tool" \
-              "$AARCH64_WRAPPER_BIN/${tool}"
-
-            ln -sfn \
-              "$source_tool" \
               "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-${tool}"
           done
 
-          test -x "$AARCH64_WRAPPER_BIN/gcc"
+          # Clang với -no-integrated-as tìm tên "as" và "ld"
+          ln -sfn \
+            /usr/bin/aarch64-linux-gnu-as \
+            "$AARCH64_WRAPPER_BIN/as"
+
+          ln -sfn \
+            /usr/bin/aarch64-linux-gnu-ld \
+            "$AARCH64_WRAPPER_BIN/ld"
+
           test -x "$AARCH64_WRAPPER_BIN/as"
           test -x "$AARCH64_WRAPPER_BIN/ld"
           test -x "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-gcc"
@@ -298,19 +308,20 @@ jobs:
           echo
           echo "=== VERIFY AARCH64 WRAPPER ==="
 
-          "$AARCH64_WRAPPER_BIN/gcc" --version
           "$AARCH64_WRAPPER_BIN/as" --version
           "$AARCH64_WRAPPER_BIN/ld" --version
-
-          "$AARCH64_WRAPPER_BIN/as" --version \
-            | grep -q "aarch64-linux-gnu"
-
-          "$AARCH64_WRAPPER_BIN/ld" --version \
-            | grep -q "GNU ld"
+          "$AARCH64_WRAPPER_BIN/aarch64-linux-gnu-gcc" --version
 
           echo "AS real path: $(readlink -f "$AARCH64_WRAPPER_BIN/as")"
           echo "LD real path: $(readlink -f "$AARCH64_WRAPPER_BIN/ld")"
-          echo "GCC real path: $(readlink -f "$AARCH64_WRAPPER_BIN/gcc")"
+
+          echo
+          echo "=== VERIFY HOST COMPILER REMAINS X86_64 ==="
+
+          command -v gcc
+          /usr/bin/gcc -dumpmachine
+
+          test "$(/usr/bin/gcc -dumpmachine)" = "x86_64-linux-gnu"
 
           echo
           echo "=== PATCH BUILD SCRIPT ==="
@@ -379,18 +390,15 @@ jobs:
             "/^export CROSS_COMPILE_ARM32=/a export CLANG_TRIPLE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
             build_kernel.sh
 
-          if grep -q \
-            '^export PATH=.*aarch64-wrapper' \
+          # Xóa PATH wrapper cũ nếu từng được chèn
+          sed -i \
+            '/^export PATH=.*aarch64-wrapper/d' \
             build_kernel.sh
-          then
-            sed -i \
-              "s|^export PATH=.*aarch64-wrapper.*|export PATH=\"${AARCH64_WRAPPER_BIN}:\$PATH\"|" \
-              build_kernel.sh
-          else
-            sed -i \
-              "/^export CLANG_TRIPLE=/a export PATH=\"${AARCH64_WRAPPER_BIN}:\$PATH\"" \
-              build_kernel.sh
-          fi
+
+          # Ép các công cụ host dùng compiler x86_64
+          sed -i \
+            '/^export CC=/a export HOSTCC=/usr/bin/gcc\nexport HOSTCXX=/usr/bin/g++\nexport HOSTLD=/usr/bin/ld' \
+            build_kernel.sh
 
           grep -qx \
             "export CROSS_COMPILE=${AARCH64_WRAPPER_BIN}/aarch64-linux-gnu-" \
@@ -401,8 +409,20 @@ jobs:
             build_kernel.sh
 
           grep -qx \
-            "export PATH=\"${AARCH64_WRAPPER_BIN}:\$PATH\"" \
+            'export HOSTCC=/usr/bin/gcc' \
             build_kernel.sh
+
+          grep -qx \
+            'export HOSTCXX=/usr/bin/g++' \
+            build_kernel.sh
+
+          if grep -q \
+            '^export PATH=.*aarch64-wrapper' \
+            build_kernel.sh
+          then
+            echo "ERROR: ARM64 wrapper must not be added to PATH"
+            exit 1
+          fi
 
           echo
           echo "=== APPLY CLANG 16 COMPATIBILITY FLAGS ==="
@@ -446,18 +466,40 @@ jobs:
           echo "=== TOOLCHAIN SETTINGS AFTER PATCH ==="
 
           grep -nE \
-            '^(export CC|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|export PATH|export KCFLAGS|ZIP_DIR|ZIP_ALT_DIR)' \
+            '^(export CC|export HOSTCC|export HOSTCXX|export HOSTLD|export CROSS_COMPILE|export CROSS_COMPILE_ARM32|export CLANG_TRIPLE|export PATH|export KCFLAGS|ZIP_DIR|ZIP_ALT_DIR)' \
             build_kernel.sh
 
           echo
-          echo "=== WRAPPER LINKS ==="
+          echo "=== VERIFY NO ARM64 WRAPPER IN PATH ==="
 
-          ls -la "$AARCH64_WRAPPER_BIN"
+          if grep -q \
+            '^export PATH=.*aarch64-wrapper' \
+            build_kernel.sh
+          then
+            echo "ERROR: Wrapper is still in PATH"
+            exit 1
+          fi
 
           echo
-          echo "AS -> $(readlink -f "$AARCH64_WRAPPER_BIN/as")"
-          echo "LD -> $(readlink -f "$AARCH64_WRAPPER_BIN/ld")"
-          echo "GCC -> $(readlink -f "$AARCH64_WRAPPER_BIN/gcc")"
+          echo "=== HOST FIXDEP TEST ==="
+
+          rm -f scripts/basic/fixdep
+
+          make V=1 -j1 \
+            HOSTCC=/usr/bin/gcc \
+            HOSTCXX=/usr/bin/g++ \
+            scripts_basic
+
+          test -x scripts/basic/fixdep
+
+          file scripts/basic/fixdep
+
+          file scripts/basic/fixdep \
+            | grep -q "x86-64"
+
+          scripts/basic/fixdep 2>&1 \
+            | head -n 2 \
+            || true
 
           echo
           echo "=== MAKE COMMANDS AFTER DEBUG PATCH ==="
@@ -507,35 +549,12 @@ jobs:
 
           mkdir -p debug-files
 
-          cp -f \
-            patch-full.log \
-            debug-files/ \
-            2>/dev/null
-
-          cp -f \
-            build-full.log \
-            debug-files/ \
-            2>/dev/null
-
-          cp -f \
-            toolchain-info.txt \
-            debug-files/ \
-            2>/dev/null
-
-          cp -f \
-            build_kernel.sh \
-            debug-files/ \
-            2>/dev/null
-
-          cp -f \
-            build_kernel-patched.sh \
-            debug-files/ \
-            2>/dev/null
-
-          cp -f \
-            .config \
-            debug-files/final-dot-config.txt \
-            2>/dev/null
+          cp -f patch-full.log debug-files/ 2>/dev/null
+          cp -f build-full.log debug-files/ 2>/dev/null
+          cp -f toolchain-info.txt debug-files/ 2>/dev/null
+          cp -f build_kernel.sh debug-files/ 2>/dev/null
+          cp -f build_kernel-patched.sh debug-files/ 2>/dev/null
+          cp -f .config debug-files/final-dot-config.txt 2>/dev/null
 
           cp -f \
             arch/arm64/configs/exynos9810_defconfig \
@@ -551,6 +570,10 @@ jobs:
             net/wireguard/Kconfig \
             debug-files/wireguard-Kconfig.txt \
             2>/dev/null
+
+          file scripts/basic/fixdep \
+            > debug-files/fixdep-file-type.txt \
+            2>&1
 
           git diff \
             > debug-files/kernel-workflow-changes.diff \
